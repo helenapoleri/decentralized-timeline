@@ -35,45 +35,23 @@ class Timeline:
 
         timeline_entry = TimelineEntry(user, message)
 
-        # timeline_entry = {
-        #     "name": user,
-        #     "message": message
-        # }
-        print(timeline_entry)
         self.messages.append(timeline_entry.get_dict())
 
-        input("...")
-        print("cheguei aqui")
         if not os.path.isdir('messages'):
-            print("vou criar pasta")
             os.mkdir('messages')
 
         with open('messages/' + self.username + '-messages.json', 'w') as outfile:
-            print("OI")
-            print(self.username)
-            print(self.messages)
-            print(type(self.messages))
             json.dump(self.messages, outfile)
 
     def get_timeline(self):
         try:
-            print("WWWWWWTTTTTTTFFFFFF")
             with open('messages/' + self.username + '-messages.json', 'r') as infile:
-                print("burro")
+                print("oi")
                 data = json.load(infile)
-                print("burro2")
+                print("oi2")
                 res = []
-                #print(self.username)
-                print(data)
                 for msg in data:
-                    print(msg)
                     res.append(TimelineEntry(msg['name'], msg['message']).get_dict())
-                for i in res:
-                    print("oi")
-                    print(i)
-                print("burr2")
-                print(data)
-                print(res)
                 return res
         except:
             return []

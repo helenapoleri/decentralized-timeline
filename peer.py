@@ -12,7 +12,7 @@ from consolemenu import *
 from consolemenu.items import *
 
 server = None
-loop = None
+LOOP = None
 NODE = None
 
 def post_message():
@@ -22,9 +22,20 @@ def post_message():
     input("Press Enter to continue...")
 
 def follow_user():
-    username = input("Enter Username: ")
-    print(username)
-    time.sleep(5)
+    global LOOP
+
+    username = input("Enter username to follow: ")
+
+    try:
+        (ip, port) = KS.get_user_ip(username)
+        LOOP.run_until_complete(NODE.follow_user(ip, port, LOOP, username))
+    except Exception as e:
+        print(e)
+        input("Press Enter to continue...")
+
+    input("Press Enter to continue...")
+
+    
 
 def show_timeline():
     NODE.show_timeline()
@@ -71,7 +82,7 @@ def show_main_menu():
     menu.append_item(FunctionItem("Post a message", post_message))
     menu.show()
 
-def show_auth_menu(server, loop, address, port):
+def show_auth_menu(server, address, port):
     menu = ConsoleMenu("Decentralized Timeline", "Authentication")
     menu.append_item(FunctionItem("Login", login))
     menu.append_item(FunctionItem("Register", register, [address, port]))
@@ -79,6 +90,7 @@ def show_auth_menu(server, loop, address, port):
     
 def main(address, port):
     global KS
+    global LOOP
     
     config = configparser.ConfigParser()
     config.read(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'config/configuration.ini'))
@@ -88,9 +100,9 @@ def main(address, port):
     bt_addresses = [(x, int(y)) for [x, y] in bt_addresses_p]
     print(bt_addresses)
     KS = KademliaServer(address, port)
-    (server, loop) = KS.start_server(bt_addresses)
+    (server, LOOP) = KS.start_server(bt_addresses)
 
-    show_auth_menu(server, loop, address, port)
+    show_auth_menu(server, address, port)
 
 if __name__ == "__main__":
 

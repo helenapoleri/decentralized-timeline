@@ -53,6 +53,7 @@ class KademliaServer:
         result = self.loop.run_until_complete(self.server.get(username))
         result = json.loads(result)
 
+
         if result is not None:
             value = {
                 "followers": result['followers'],
@@ -64,3 +65,12 @@ class KademliaServer:
 
         else:
             raise Exception("User doesn't exist! Please register")
+    
+    def get_user_ip(self, username):
+        result = self.loop.run_until_complete(self.server.get(username))
+        result = json.loads(result)
+        
+        if result is None:
+            raise Exception("User doesn't exist!")
+        else:
+            return (result["ip"], result["port"])

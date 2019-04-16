@@ -22,8 +22,6 @@ loop.set_debug(True)
 server = Server()
 loop.run_until_complete(server.listen(int(sys.argv[3])))
 
-
-print("ole")
 print(server.bootstrappable_neighbors())
 # try:
 #     loop.run_forever()
