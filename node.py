@@ -25,7 +25,12 @@ from kademlia.network import Server
         #self.transport.write(data)
 '''
 
+SERVER = None
+USERNAME = None
+LIST_LOOP = None
+
 async def node_server(reader, writer):
+    global LIST_LOOP
 
     while True:
         data = await reader.read(100)  # Max number of bytes to read
@@ -35,10 +40,41 @@ async def node_server(reader, writer):
         data = json.loads(json_string)
         if "follow" in data:
             new_follower = data["follow"]["username"]
-            #result = self.loop.run_until_complete(self.server.get(USERNAME))
+            # loop = asyncio.get_event_loop()
+
+            print("1==================")
+            print(SERVER.bootstrappable_neighbors())
+            print("==================")
+
+            result = await SERVER.get(USERNAME)
+
+            print(type(result))
+            print(result)
+            info = json.loads(result)
+
+            print("2==================")
+            print(SERVER.bootstrappable_neighbors())
+            print("==================")
+
+            if new_follower in info['followers']:
+                writer.write(b'0')
+            else:
+                info["followers"] = info["followers"].append(new_follower)
+                value = json.dumps(info)
+                print("3==================")
+                print(SERVER.bootstrappable_neighbors())
+                print("==================")
+                # set_task = asyncio.ensure_future(SERVER.set(USERNAME, value))
+                print("4==================")
+                print(SERVER.bootstrappable_neighbors())
+                print("==================")
+                # await set_task
+                writer.write(b'1')
+
+            print(result)
             print(data)
             print(new_follower)
-        writer.write(b'1')
+        
         await writer.drain()  # Flow control, see later
     writer.close()
 
@@ -62,30 +98,35 @@ class Listener(Thread):
     '''
 
     async def start_listener(self):
-        loop = asyncio.get_event_loop()
+        #loop = asyncio.get_event_loop()
         server = await asyncio.start_server(node_server, self.address, self.port)
         await server.serve_forever()
 
     def run(self):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(self.start_listener())
+        global LIST_LOOP
+
+        LIST_LOOP = asyncio.new_event_loop()
+        #asyncio.set_event_loop(loop)
+        result = LIST_LOOP.run_until_complete(self.start_listener())
 
 class Node:
-    def __init__(self, address, port, username, state=None):        
+    def __init__(self, address, port, username, server, state=None):   
+        global SERVER, USERNAME
+
         self.timeline = Timeline(username)
-        self.username = username
+        USERNAME = username
         self.address = address
         self.port = port
-        self.server = None
+        SERVER = server
         self.connections = {} # ainda n sei bem como é que vai ser
         self.listener = Listener(self.address, self.port, self.connections)
         self.listener.start()
 
     def post_message(self, message):
+        global USERNAME
         
         # add to timeline
-        self.timeline.add_message(self.username, message)
+        self.timeline.add_message(USERNAME, message)
         # increment vetor clock
         # create message
         # send message
@@ -95,7 +136,9 @@ class Node:
 
     async def follow_user(self, ip, port, loop, to_follow):
 
-        if to_follow == self.username:
+        global USERNAME
+
+        if to_follow == USERNAME:
             print("You can't follow yourself!")
             return
 
@@ -108,7 +151,7 @@ class Node:
         
         data = {
             "follow": {
-                "username": self.username
+                "username": USERNAME
             }
         }
         json_string = json.dumps(data)

@@ -21,6 +21,7 @@ loop.set_debug(True)
 
 server = Server()
 loop.run_until_complete(server.listen(int(sys.argv[3])))
+loop.run_until_complete(server.bootstrap([(sys.argv[1], int(sys.argv[2]))]))
 
 print(server.bootstrappable_neighbors())
 # try:

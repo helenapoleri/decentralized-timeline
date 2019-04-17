@@ -5,13 +5,14 @@ import os
 import argparse
 import regex as re
 import sys
+import asyncio
 
 from kademlia_server import KademliaServer
 from node import Node
 from consolemenu import *
 from consolemenu.items import *
 
-server = None
+SERVER = None
 LOOP = None
 NODE = None
 
@@ -43,12 +44,12 @@ def show_timeline():
     input("Press Enter to continue...")
 
 def login():
-    global NODE
+    global NODE, SERVER
 
     username = input("Username: ")
     try:
         state = KS.login(username)
-        NODE = Node(address, port, username, state)
+        NODE = Node(address, port, username, SERVER, state)
         print("Login com sucesso!")
         input("Press Enter to continue...")
         show_main_menu()
@@ -59,13 +60,14 @@ def login():
 
 def register(address, port):
     global NODE
-
+    global LOOP
     username = input("Username: ")
     try:
+
         KS.register(username)
-        NODE = Node(address, port, username)
-        print("Registado com sucesso!")
-        show_main_menu()
+        #NODE = Node(address, port, username, SERVER)
+        #print("Registado com sucesso!")
+        #show_main_menu()
     except Exception as e:
         print(e)
     
@@ -82,7 +84,7 @@ def show_main_menu():
     menu.append_item(FunctionItem("Post a message", post_message))
     menu.show()
 
-def show_auth_menu(server, address, port):
+def show_auth_menu(address, port):
     menu = ConsoleMenu("Decentralized Timeline", "Authentication")
     menu.append_item(FunctionItem("Login", login))
     menu.append_item(FunctionItem("Register", register, [address, port]))
@@ -91,6 +93,7 @@ def show_auth_menu(server, address, port):
 def main(address, port):
     global KS
     global LOOP
+    global SERVER
     
     config = configparser.ConfigParser()
     config.read(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'config/configuration.ini'))
@@ -100,9 +103,16 @@ def main(address, port):
     bt_addresses = [(x, int(y)) for [x, y] in bt_addresses_p]
     print(bt_addresses)
     KS = KademliaServer(address, port)
-    (server, LOOP) = KS.start_server(bt_addresses)
+    (SERVER, LOOP) = KS.start_server(bt_addresses)
 
-    show_auth_menu(server, address, port)
+    asyncio.ensure_future(show_auth_menu(address, port))
+    try:
+        LOOP.run_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        SERVER.stop()
+    LOOP.close()
 
 if __name__ == "__main__":
 

@@ -1,8 +1,11 @@
 import logging
+from threading import *
 import asyncio
 import sys
 import json
+
 from kademlia.network import Server
+
 
 DEBUG = True
 
@@ -33,6 +36,9 @@ class KademliaServer:
 
         # bootstrap_node = (bt_Ip, int(bt_port))
         self.loop.run_until_complete(self.server.bootstrap(bootstrap_nodes))
+
+        thread = Thread(target=self.loop.run_forever)
+        thread.start()
 
         return (self.server, self.loop)
 
