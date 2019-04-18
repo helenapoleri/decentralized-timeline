@@ -6,7 +6,13 @@ import argparse
 import regex as re
 import sys
 import asyncio
+import async_tasks
+import logging
+import threading
 
+from Menu.menu import Menu
+from Menu.item import Item
+from kademlia.network import Server
 from kademlia_server import KademliaServer
 from node import Node
 from consolemenu import *
@@ -15,6 +21,9 @@ from consolemenu.items import *
 SERVER = None
 LOOP = None
 NODE = None
+ADDRESS = None
+PORT = None
+KS = None
 
 def post_message():
     message = input("Enter Message:\n")
@@ -36,7 +45,28 @@ def follow_user():
 
     input("Press Enter to continue...")
 
-    
+def build_menu():
+    menu = Menu('Menu')
+    menu.add_item(Item('1 - Register', register))
+    return menu
+
+def register():
+    print(threading.enumerate())
+    user = input('User Nickname: ')
+
+    # loop = asyncio.get_event_loop()
+    asyncio.create_task(async_tasks.register(user, ADDRESS, PORT, SERVER, KS))
+    # if task is None:
+    #     print("OLA")
+    # else:
+    #     print("OLE")
+
+    # if loop is not None:
+    #     print(type(loop))
+
+    # loop.run_until_complete(task)
+    # print("CENAS")
+    return False
 
 def show_timeline():
     NODE.show_timeline()
@@ -58,24 +88,7 @@ def login():
         input("Press Enter to continue...")
 
 
-def register(address, port):
-    global NODE
-    global LOOP
-    username = input("Username: ")
-    try:
 
-        KS.register(username)
-        #NODE = Node(address, port, username, SERVER)
-        #print("Registado com sucesso!")
-        #show_main_menu()
-    except Exception as e:
-        print(e)
-    
-
-    input("Press Enter to continue...")
-    # verificar se nodo existe
-    # set das infooos
-    #
 
 def show_main_menu():
     menu = ConsoleMenu("Decentralized Timeline", "Main Menu")
@@ -84,29 +97,62 @@ def show_main_menu():
     menu.append_item(FunctionItem("Post a message", post_message))
     menu.show()
 
-def show_auth_menu(address, port):
-    menu = ConsoleMenu("Decentralized Timeline", "Authentication")
-    menu.append_item(FunctionItem("Login", login))
-    menu.append_item(FunctionItem("Register", register, [address, port]))
-    menu.show()
+# def show_auth_menu(address, port):
+#     menu = ConsoleMenu("Decentralized Timeline", "Authentication")
+#     # menu.append_item(FunctionItem("Login", login))
+#     menu.append_item(FunctionItem("Register", register, [address, port]))
+#     menu.show()
     
+# def register
+
 def main(address, port):
     global KS
     global LOOP
+    global ADDRESS, PORT
     global SERVER
-    
+
+    ADDRESS = address
+    PORT = port
+    print(threading.get_ident())
     config = configparser.ConfigParser()
     config.read(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'config/configuration.ini'))
 
     bt_addresses_p = [address_port.split(":") for address_port in config.get("BOOTSTRAP", "INITIAL_NODES").split(",")]
-    print(bt_addresses_p)
     bt_addresses = [(x, int(y)) for [x, y] in bt_addresses_p]
-    print(bt_addresses)
     KS = KademliaServer(address, port)
-    (SERVER, LOOP) = KS.start_server(bt_addresses)
+    DEBUG = True
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+        
+    # DEBUG
+    if DEBUG:
+        log = logging.getLogger('kademlia')
+        log.addHandler(handler)
+        log.setLevel(logging.DEBUG)
 
-    asyncio.ensure_future(show_auth_menu(address, port))
+    LOOP = asyncio.get_event_loop()
+    if DEBUG:
+        LOOP.set_debug(True)
+
+    #asyncio.set_event_loop(LOOP)
+    #(SERVER, LOOP) = ks.start_server(bt_addresses)
+    SERVER = Server()
+
+    print(threading.enumerate())
+
+    LOOP.run_until_complete(SERVER.listen(port))
+    LOOP.run_until_complete(SERVER.bootstrap(bt_addresses))
+
+    m = build_menu()
+
+    print(threading.enumerate())
+    asyncio.ensure_future(async_tasks.show_auth_menu(m))
+    print(1)
+    print(threading.enumerate())
+    print(2)
     try:
+        print("Hello")
         LOOP.run_forever()
     except KeyboardInterrupt:
         pass
