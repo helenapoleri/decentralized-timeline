@@ -124,7 +124,7 @@ def main(address, port):
 
     Thread(target=LOOP.run_forever, daemon=True).start()
     
-    run_main_menu()
+    run_auth_menu()
 
 if __name__ == "__main__":
 
