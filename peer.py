@@ -7,112 +7,124 @@ import regex as re
 import sys
 import asyncio
 
+from threading import Thread
 from kademlia_server import KademliaServer
 from node import Node
-from consolemenu import *
-from consolemenu.items import *
+from menu.menu import Menu
+from menu.menu_item import MenuItem
 
 SERVER = None
 LOOP = None
 NODE = None
+AUTH_MENU = None
+MAIN_MENU = None
 
 def post_message():
-    message = input("Enter Message:\n")
+    message = input("Enter Message: \n")
     NODE.post_message(message)
     
-    input("Press Enter to continue...")
+    input("Press Enter to continue... \n")
 
-def follow_user():
-    global LOOP
+async def follow_user():
+    global LOOP, KS, NODE
 
     username = input("Enter username to follow: ")
 
     try:
-        (ip, port) = KS.get_user_ip(username)
-        LOOP.run_until_complete(NODE.follow_user(ip, port, LOOP, username))
+        (ip, port) = await KS.get_user_ip(username)
+        await NODE.follow_user(ip, port, LOOP, username)
     except Exception as e:
         print(e)
-        input("Press Enter to continue...")
+        input("Press Enter to continue... \n")
+        return
 
-    input("Press Enter to continue...")
+    input("Press Enter to continue... \n")
 
-    
 
 def show_timeline():
+    global MAIN_MENU, NODE
+
     NODE.show_timeline()
 
-    input("Press Enter to continue...")
+    input("Press Enter to continue... \n")
 
-def login():
-    global NODE, SERVER
+async def login():
+    global NODE, SERVER, MAIN_MENU, AUTH_MENU, KS
 
     username = input("Username: ")
     try:
-        state = KS.login(username)
+        state = await KS.login(username)
         NODE = Node(address, port, username, SERVER, state)
         print("Login com sucesso!")
-        input("Press Enter to continue...")
-        show_main_menu()
+        input("Press Enter to continue... \n")
+        
+        return 1
+
     except Exception as e:
         print(e)
-        input("Press Enter to continue...")
+        input("Press Enter to continue... \n")
+        return 0
 
+async def register(address, port):
+    global NODE, KS,  SERVER
 
-def register(address, port):
-    global NODE
-    global LOOP
     username = input("Username: ")
     try:
-
-        KS.register(username)
-        #NODE = Node(address, port, username, SERVER)
-        #print("Registado com sucesso!")
-        #show_main_menu()
+        await KS.register(username)
+        NODE = Node(address, port, username, SERVER)
+        print("Registado com sucesso!")
+        input("Press Enter to continue... \n")
+        return 1
+        
     except Exception as e:
         print(e)
-    
+        input("Press Enter to continue... \n")
+        
+        return 0
 
-    input("Press Enter to continue...")
-    # verificar se nodo existe
-    # set das infooos
-    #
+def build_main_menu():
+    menu = Menu("Main Menu")
 
-def show_main_menu():
-    menu = ConsoleMenu("Decentralized Timeline", "Main Menu")
-    menu.append_item(FunctionItem("Show timeline", show_timeline))
-    menu.append_item(FunctionItem("Follow user", follow_user))
-    menu.append_item(FunctionItem("Post a message", post_message))
-    menu.show()
+    menu.append_item(MenuItem("Show timeline", show_timeline))
+    menu.append_item(MenuItem("Follow user", follow_user))
+    menu.append_item(MenuItem("Post a message", post_message))
+    return menu
 
-def show_auth_menu(address, port):
-    menu = ConsoleMenu("Decentralized Timeline", "Authentication")
-    menu.append_item(FunctionItem("Login", login))
-    menu.append_item(FunctionItem("Register", register, [address, port]))
-    menu.show()
-    
+def build_auth_menu(address, port):
+    menu = Menu("Authentication")
+    menu.append_item(MenuItem("Login", login))
+    menu.append_item(MenuItem("Register", register, address, port))
+
+    return menu
+
+def run_main_menu():
+    global MAIN_MENU
+    MAIN_MENU = build_main_menu()
+    while True:
+        MAIN_MENU.execute()
+
+def run_auth_menu():
+    global AUTH_MENU
+    AUTH_MENU = build_auth_menu(address, port)
+    while True:
+        auth_successful = AUTH_MENU.execute()
+        if auth_successful == 1:
+            run_main_menu()
+
 def main(address, port):
-    global KS
-    global LOOP
-    global SERVER
+    global KS, LOOP, SERVER
     
     config = configparser.ConfigParser()
     config.read(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'config/configuration.ini'))
 
     bt_addresses_p = [address_port.split(":") for address_port in config.get("BOOTSTRAP", "INITIAL_NODES").split(",")]
-    print(bt_addresses_p)
     bt_addresses = [(x, int(y)) for [x, y] in bt_addresses_p]
-    print(bt_addresses)
     KS = KademliaServer(address, port)
     (SERVER, LOOP) = KS.start_server(bt_addresses)
 
-    asyncio.ensure_future(show_auth_menu(address, port))
-    try:
-        LOOP.run_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        SERVER.stop()
-    LOOP.close()
+    Thread(target=LOOP.run_forever, daemon=True).start()
+    
+    run_main_menu()
 
 if __name__ == "__main__":
 

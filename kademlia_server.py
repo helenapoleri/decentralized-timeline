@@ -1,13 +1,12 @@
 import logging
-from threading import *
 import asyncio
 import sys
 import json
 
+from threading import *
 from kademlia.network import Server
 
-
-DEBUG = True
+DEBUG = False
 
 class KademliaServer:
     def __init__(self, ip, port):
@@ -37,13 +36,10 @@ class KademliaServer:
         # bootstrap_node = (bt_Ip, int(bt_port))
         self.loop.run_until_complete(self.server.bootstrap(bootstrap_nodes))
 
-        thread = Thread(target=self.loop.run_forever)
-        thread.start()
-
         return (self.server, self.loop)
 
-    def register(self, username):
-        result = self.loop.run_until_complete(self.server.get(username))
+    async def register(self, username):
+        result = await self.server.get(username)
         if result is None:
             value = {
                 "followers": [],
@@ -51,14 +47,13 @@ class KademliaServer:
                 "port": self.port
             }
             value = json.dumps(value)
-            self.loop.run_until_complete(self.server.set(username, value))
+            await self.server.set(username, value)
         else:
             raise Exception("Username already exists")
     
-    def login(self, username):
-        result = self.loop.run_until_complete(self.server.get(username))
+    async def login(self, username):
+        result = await self.server.get(username)
         result = json.loads(result)
-
 
         if result is not None:
             value = {
@@ -67,13 +62,13 @@ class KademliaServer:
                 "port": self.port
             }
             value = json.dumps(value)
-            self.loop.run_until_complete(self.server.set(username, value))
+            await self.server.set(username, value)
 
         else:
             raise Exception("User doesn't exist! Please register")
     
-    def get_user_ip(self, username):
-        result = self.loop.run_until_complete(self.server.get(username))
+    async def get_user_ip(self, username):
+        result = await self.server.get(username)
         result = json.loads(result)
         
         if result is None:

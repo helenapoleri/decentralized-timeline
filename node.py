@@ -40,42 +40,18 @@ async def node_server(reader, writer):
         data = json.loads(json_string)
         if "follow" in data:
             new_follower = data["follow"]["username"]
-            # loop = asyncio.get_event_loop()
-
-            print("1==================")
-            print(SERVER.bootstrappable_neighbors())
-            print("==================")
-
             result = await SERVER.get(USERNAME)
-
-            print(type(result))
-            print(result)
             info = json.loads(result)
-
-            print("2==================")
-            print(SERVER.bootstrappable_neighbors())
-            print("==================")
 
             if new_follower in info['followers']:
                 writer.write(b'0')
             else:
-                info["followers"] = info["followers"].append(new_follower)
+                info["followers"].append(new_follower)
                 value = json.dumps(info)
-                print("3==================")
-                print(SERVER.bootstrappable_neighbors())
-                print("==================")
-                # set_task = asyncio.ensure_future(SERVER.set(USERNAME, value))
-                print("4==================")
-                print(SERVER.bootstrappable_neighbors())
-                print("==================")
-                # await set_task
+                await SERVER.set(USERNAME, value)
                 writer.write(b'1')
 
-            print(result)
-            print(data)
-            print(new_follower)
-        
-        await writer.drain()  # Flow control, see later
+        await writer.drain()
     writer.close()
 
 class Listener(Thread):
@@ -135,7 +111,6 @@ class Node:
         print(self.timeline)
 
     async def follow_user(self, ip, port, loop, to_follow):
-
         global USERNAME
 
         if to_follow == USERNAME:
