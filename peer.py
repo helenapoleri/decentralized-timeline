@@ -16,12 +16,23 @@ from menu.menu_item import MenuItem
 SERVER = None
 LOOP = None
 NODE = None
+KS = None
 AUTH_MENU = None
 MAIN_MENU = None
 
-def post_message():
+async def post_message():
+    global KS, NODE
+
     message = input("Enter Message: \n")
-    NODE.post_message(message)
+
+    try:
+        followers = await KS.get_user_followers(NODE.get_username())
+    except Exception as e:
+        print(e)
+
+    print(followers)
+
+    await NODE.post_message(message, followers)
     
     input("Press Enter to continue... \n")
 

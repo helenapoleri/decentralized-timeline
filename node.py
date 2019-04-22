@@ -28,9 +28,10 @@ from kademlia.network import Server
 SERVER = None
 USERNAME = None
 LIST_LOOP = None
+TIMELINE = None
 
 async def node_server(reader, writer):
-    global LIST_LOOP
+    global LIST_LOOP, TIMELINE
 
     while True:
         data = await reader.read(100)  # Max number of bytes to read
@@ -38,6 +39,7 @@ async def node_server(reader, writer):
             break
         json_string = data.decode()
         data = json.loads(json_string)
+        print(data)
         if "follow" in data:
             new_follower = data["follow"]["username"]
             result = await SERVER.get(USERNAME)
@@ -51,7 +53,13 @@ async def node_server(reader, writer):
                 await SERVER.set(USERNAME, value)
                 writer.write(b'1')
 
+        elif 'post' in data:
+            sender = data["post"]["username"]
+            message =  data["post"]["message"]
+            TIMELINE.add_message(sender, message)
+
         await writer.drain()
+
     writer.close()
 
 class Listener(Thread):
@@ -87,9 +95,9 @@ class Listener(Thread):
 
 class Node:
     def __init__(self, address, port, username, server, state=None):   
-        global SERVER, USERNAME
+        global SERVER, USERNAME, TIMELINE
 
-        self.timeline = Timeline(username)
+        TIMELINE = Timeline(username)
         USERNAME = username
         self.address = address
         self.port = port
@@ -98,17 +106,41 @@ class Node:
         self.listener = Listener(self.address, self.port, self.connections)
         self.listener.start()
 
-    def post_message(self, message):
-        global USERNAME
+    def get_username(self):
+        return USERNAME
+
+    async def post_message(self, message, followers):
+        global USERNAME, TIMELINE
         
         # add to timeline
-        self.timeline.add_message(USERNAME, message)
+        TIMELINE.add_message(USERNAME, message)
         # increment vetor clock
         # create message
         # send message
+        print("ola")
+        print(followers)
+        print(followers.values())
+        for follower in followers.keys():
+            if follower not in self.connections:
+                print(followers.get(follower))
+                (reader, writer) = await asyncio.open_connection(followers.get(follower)[0], followers.get(follower)[1],
+                loop=asyncio.get_event_loop())
+                self.connections[follower] = (reader, writer)
+
+            (reader, writer) = self.connections.get(follower)
+            data = {
+                "post": {
+                    "username": USERNAME,
+                    "message": message
+                }
+            }
+            json_string = json.dumps(data)
+            writer.write(json_string.encode())
+                
 
     def show_timeline(self):
-        print(self.timeline)
+        global TIMELINE
+        print(TIMELINE)
 
     async def follow_user(self, ip, port, loop, to_follow):
         global USERNAME
@@ -118,7 +150,7 @@ class Node:
             return
 
         try: 
-            reader, writer = await asyncio.open_connection(ip, port,
+            (reader, writer) = await asyncio.open_connection(ip, port,
             loop=loop)
         except Exception:
             print("It's not possible to follow that user right now! (user offline)")

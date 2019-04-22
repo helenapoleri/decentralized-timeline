@@ -13,6 +13,10 @@ class KademliaServer:
         self.ip = ip
         self.port = port
         self.loop = None
+    def start_server(self, bootstrap_nodes): 
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
         self.server = None
 
     def start_server(self, bootstrap_nodes): 
@@ -75,3 +79,17 @@ class KademliaServer:
             raise Exception("User doesn't exist!")
         else:
             return (result["ip"], result["port"])
+
+    async def get_user_followers(self, username):
+        followers = {}
+        result = await self.server.get(username)
+        result = json.loads(result)
+        for follower in result["followers"]:
+            result = await self.server.get(follower)
+            result = json.loads(result)
+            if result is not None:
+                print("cooooooooooooooomoooo")
+                followers[follower] = (result["ip"], result["port"])
+        
+        return followers
+
