@@ -6,6 +6,8 @@ import argparse
 import regex as re
 import sys
 import asyncio
+from utils.prompt import Prompt
+from aioconsole import ainput
 
 from threading import Thread
 from kademlia_server import KademliaServer
@@ -16,40 +18,35 @@ from menu.menu_item import MenuItem
 SERVER = None
 LOOP = None
 NODE = None
+PROMPT = None
 KS = None
 AUTH_MENU = None
 MAIN_MENU = None
 
 async def post_message():
-    global KS, NODE
+    global KS, NODE, PROMPT
 
-    message = input("Enter Message: \n")
+    message = await PROMPT("Enter Message: \n")
 
     try:
         followers = await KS.get_user_followers(NODE.get_username())
     except Exception as e:
         print(e)
 
-    print(followers)
-
     await NODE.post_message(message, followers)
     
-    input("Press Enter to continue... \n")
 
 async def follow_user():
-    global LOOP, KS, NODE
+    global LOOP, KS, NODE, PROMPT
 
-    username = input("Enter username to follow: ")
+    username = await PROMPT("Enter username: ")
 
     try:
         (ip, port) = await KS.get_user_ip(username)
         await NODE.follow_user(ip, port, LOOP, username)
     except Exception as e:
         print(e)
-        input("Press Enter to continue... \n")
         return
-
-    input("Press Enter to continue... \n")
 
 
 def show_timeline():
@@ -57,39 +54,35 @@ def show_timeline():
 
     NODE.show_timeline()
 
-    input("Press Enter to continue... \n")
-
 async def login():
-    global NODE, SERVER, MAIN_MENU, AUTH_MENU, KS
+    global NODE, SERVER, KS, PROMPT
 
-    username = input("Username: ")
+    username = await PROMPT("Username: ")
+
     try:
         state = await KS.login(username)
         NODE = Node(address, port, username, SERVER, state)
         print("Login com sucesso!")
-        input("Press Enter to continue... \n")
         
         return 1
 
     except Exception as e:
         print(e)
-        input("Press Enter to continue... \n")
         return 0
 
 async def register(address, port):
-    global NODE, KS,  SERVER
+    global NODE, KS, SERVER, PROMPT
 
-    username = input("Username: ")
+    username = await PROMPT("Username: ")
+
     try:
         await KS.register(username)
         NODE = Node(address, port, username, SERVER)
         print("Registado com sucesso!")
-        input("Press Enter to continue... \n")
         return 1
         
     except Exception as e:
         print(e)
-        input("Press Enter to continue... \n")
         
         return 0
 
@@ -113,17 +106,19 @@ def run_main_menu():
     MAIN_MENU = build_main_menu()
     while True:
         MAIN_MENU.execute()
+        input("press enter to continue...")
 
 def run_auth_menu():
     global AUTH_MENU
     AUTH_MENU = build_auth_menu(address, port)
     while True:
         auth_successful = AUTH_MENU.execute()
+        input("press enter to continue..")
         if auth_successful == 1:
             run_main_menu()
 
 def main(address, port):
-    global KS, LOOP, SERVER
+    global KS, LOOP, SERVER, PROMPT
     
     config = configparser.ConfigParser()
     config.read(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'config/configuration.ini'))
@@ -132,6 +127,8 @@ def main(address, port):
     bt_addresses = [(x, int(y)) for [x, y] in bt_addresses_p]
     KS = KademliaServer(address, port)
     (SERVER, LOOP) = KS.start_server(bt_addresses)
+
+    PROMPT = Prompt(LOOP)
 
     Thread(target=LOOP.run_forever, daemon=True).start()
     
