@@ -34,8 +34,12 @@ class Menu:
 
     def read_option(self):
         option = input("> ")
-        if int(option) <= 0 or int(option) > len(self.items):
+        try:
+            if int(option) <= 0 or int(option) > len(self.items):
+                self.option = -1
+                print("Escolhida opção inválida!")
+            else:
+                self.option = int(option)
+        except ValueError:
             self.option = -1
-            print("Escolhida opção inválida!")
-        else:
-            self.option = int(option)
+            print("Opção deve ser numérica!!")
