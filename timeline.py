@@ -1,7 +1,11 @@
 import json
 import os
+import configparser
 import utils.snowflake as snowflake
-import datetime
+import settings
+from datetime import datetime, timedelta
+
+DISCARD_BASELINE = settings.DISCARD_BASELINE
 
 class TimelineEntry:
     def __init__(self, username, content, msg_id, time):
@@ -9,27 +13,40 @@ class TimelineEntry:
         self.content = content
         self.id = msg_id
         self.time = time
+        self.seen = False
 
     def __repr__(self):
         time = self.time.strftime('%Y-%m-%d %H:%M:%S')
         return "{ \"time\":" + time +", \"name\":" +  self.username + ", \"message\":" + self.content  + "\"id\":" + self.id  +"}"
-    
+
     def get_dict(self):
         return {
             "name": self.username,
             "message": self.content,
+            "id": self.id,
             "time": self.time,
-            "id": self.id
+            "seen": self.seen
         }
     
 class Timeline:
     def __init__(self, username):
         self.username = username
         self.messages = self.get_timeline()
+        self.discard_messages()
         
     def __repr__(self):
-        messages = sorted(self.messages, key=lambda x: x['id'])
 
+        # messages = [msg for msgs in self.messages.values() for msg in msgs]
+        messages = []
+        for msgs in self.messages.values():
+            for msg in msgs:
+                msg['seen'] = True
+                messages.append(msg)
+
+        self.save_messages()
+
+        messages = sorted(messages, key=lambda x: x['time'], reverse=True)
+        
         result = ""
         
         for msg in messages:
@@ -43,15 +60,15 @@ class Timeline:
         return self.username + "'s TIMELINE" + "\n" + result
             
 
-    def add_message(self, user, message, msg_id, time):
-
-        timeline_entry = TimelineEntry(user, message, msg_id, time)
-
-        self.messages.append(timeline_entry.get_dict())
-        messages = []
-        for msg in self.messages:
-            new_msg = dict(msg)
-            new_msg['time'] = new_msg['time'].strftime('%Y-%m-%d %H:%M:%S')
+    def save_messages(self):
+        messages = {}
+        for user, msgs in self.messages.items():
+            user_msgs = []
+            for msg in msgs:
+                new_msg = dict(msg)
+                new_msg['time'] = new_msg['time'].strftime('%Y-%m-%d %H:%M:%S')
+                user_msgs.append(new_msg)
+            messages[user] = user_msgs
 
         if not os.path.isdir('messages'):
             os.mkdir('messages')
@@ -59,16 +76,46 @@ class Timeline:
         with open('messages/' + self.username + '-messages.json', 'w') as outfile:
             json.dump(messages, outfile)
 
+    def discard_messages(self):
+        max_duration = timedelta(seconds=DISCARD_BASELINE)
+        discard_time = datetime.now() - max_duration
+
+        for user, msgs in self.messages.items():
+            if user == self.username:
+                continue
+            
+            for msg in msgs:
+                if msg['time'] < discard_time and msg['seen']:
+                    msgs.remove(msg)
+                else:
+                    break
+            
+        self.save_messages()
+
+
+    def add_message(self, user, message, msg_id, time):
+
+        timeline_entry = TimelineEntry(user, message, msg_id, time)
+
+        user_msgs = self.messages.get(user,[])
+        user_msgs.append(timeline_entry.get_dict())
+        
+        self.messages[user] = user_msgs
+
+        self.discard_messages()
+        # self.save_messages() #não é necessário porque já está a ser realizado no discard_messages()
+
+
     def get_timeline(self):
         try:
             with open('messages/' + self.username + '-messages.json', 'r') as infile:
-                print("oi")
+
                 data = json.load(infile)
-                print("oi2")
-                res = []
-                for msg in data:
-                    time = datetime.strptime(msg['time'], '%Y-%m-%d %H:%M:%S')
-                    res.append(TimelineEntry(msg['name'], msg['message'], msg['id'], time).get_dict())
-                return res
+                for msgs in data.values():
+                    for msg in msgs:
+                        msg['time'] = datetime.strptime(msg['time'], '%Y-%m-%d %H:%M:%S')
+
+                return data
+
         except:
-            return []
+            return {}

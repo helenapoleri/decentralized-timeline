@@ -6,6 +6,7 @@ import argparse
 import regex as re
 import sys
 import asyncio
+import settings
 from utils.prompt import Prompt
 from aioconsole import ainput
 
@@ -120,10 +121,7 @@ def run_auth_menu():
 def main(address, port):
     global KS, LOOP, SERVER, PROMPT
     
-    config = configparser.ConfigParser()
-    config.read(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'config/configuration.ini'))
-
-    bt_addresses_p = [address_port.split(":") for address_port in config.get("BOOTSTRAP", "INITIAL_NODES").split(",")]
+    bt_addresses_p = [address_port.split(":") for address_port in settings.BOOTSTRAP_NODES.split(",")]
     bt_addresses = [(x, int(y)) for [x, y] in bt_addresses_p]
     KS = KademliaServer(address, port)
     (SERVER, LOOP) = KS.start_server(bt_addresses)

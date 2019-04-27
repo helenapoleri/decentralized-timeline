@@ -1,0 +1,15 @@
+==== Tarefas Implementação ====
+
+Por fazer:
+- Ver porque é que o follow_user é lento
+- Ver se queremos manter a politica de descartagem a fazer quando 
+se recebe uma mansagem ou alocamos uma tarefa de certo em certo tempo
+- Quando um nodo termina e recomeça, reiniciar as conexões
+- Fazer a cena de hierarquias
+- Quando um nodo se liga, percorrer os vizinhos de forma a manter-se atualizado,
+perguntando aos outros followers, caso se encontre desatualizado
+- Refinar os timestamps, para zonas etc
+
+Terminados:
+- (talvez ter a variavel global de politica de descartagem num ficheiro
+de configuração bem como todas as outras configurações) (DONE)
