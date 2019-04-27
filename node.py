@@ -7,39 +7,17 @@ from threading import Thread
 from timeline import Timeline
 from kademlia.network import Server
 
-'''class EchoProtocol(asyncio.Protocol):
-    def connection_made(self, transport):
-        self.transport = transport
-
-    def data_received(self, data):
-        json_string = data.decode()
-        data = json.loads(json_string)
-        print(data)
-        # Recebeu (connection request) 
-        # existe ou nao como follower
-        # se sim:
-        ## adicionar o self.transport às conexões
-
-        ## adicionar conexao às conexoes
-        # se nao:
-        ## 
-
-        #self.transport.write(data)
-'''
-
-SERVER = None
+KS = None
+LOOP = None
 USERNAME = None
 LIST_LOOP = None
 TIMELINE = None
+NODE = None
 
 async def node_server(reader, writer):
-    global LIST_LOOP, TIMELINE
+    global LIST_LOOP, TIMELINE, KS
 
-    print("AQQQBQHJBHJSBJHSBHJBSJHBS")
     while True:
-        # data_size = await reader.read(2) #Header (Payload Size)
-        # size = int.from_bytes(data_size, byteorder='big')
-        # data = await reader.read(size)   #Payload
         data = (await reader.readline()).strip()   #Payload
         if not data:
             break
@@ -49,27 +27,26 @@ async def node_server(reader, writer):
         print(data)
         if "follow" in data:
             new_follower = data["follow"]["username"]
-            result = await SERVER.get(USERNAME)
-            info = json.loads(result)
+            info = await KS.get_user(USERNAME)
 
             if new_follower in info['followers']:
                 writer.write(b'0\n')
             else:
                 info["followers"].append(new_follower)
                 value = json.dumps(info)
-                await SERVER.set(USERNAME, value)
+                await KS.set_user(USERNAME, value)
                 writer.write(b'1\n')
 
         elif 'post' in data:
             sender = data["post"]["username"]
             message =  data["post"]["message"]
             msg_id =  data["post"]["id"]
-            print(data["post"]["time"])
-            print(type(data["post"]["time"]))
             time = datetime.strptime(data["post"]["time"], '%Y-%m-%d %H:%M:%S')
-            print(time)
-            print(type(time))
             TIMELINE.add_message(sender, message, msg_id, time)
+
+        elif 'online' in data:
+            username = data['online']['username']
+            NODE.add_follower_connection(username, reader, writer)
 
         await writer.drain()
 
@@ -77,47 +54,41 @@ async def node_server(reader, writer):
 
 class Listener(Thread):
     
-    def __init__(self, address, port, connections):
+    def __init__(self, address, port):
         super(Listener, self).__init__()
         self.address = address
         self.port = port
-        self.connections = connections
-        
-    '''async def start_listener(self):
-        loop = asyncio.get_event_loop()
-        server = await loop.create_server(EchoProtocol, self.address, self.port)
-        await server.serve_forever()
-
-    def run(self):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(self.start_listener())
-    '''
 
     async def start_listener(self):
-        #loop = asyncio.get_event_loop()
         server = await asyncio.start_server(node_server, self.address, self.port)
         await server.serve_forever()
 
     def run(self):
         global LIST_LOOP
-
         LIST_LOOP = asyncio.new_event_loop()
         #asyncio.set_event_loop(loop)
         result = LIST_LOOP.run_until_complete(self.start_listener())
 
 class Node:
-    def __init__(self, address, port, username, server, state=None):   
-        global SERVER, USERNAME, TIMELINE
+    def __init__(self, address, port, username, ks, state):   
+        global KS, LOOP, USERNAME, TIMELINE, NODE
 
         TIMELINE = Timeline(username)
         USERNAME = username
         self.address = address
         self.port = port
+        self.state = state
         self.id_generator = snowflake.generator(1,1)
-        SERVER = server
-        self.connections = {} # ainda n sei bem como é que vai ser
-        self.listener = Listener(self.address, self.port, self.connections)
+        KS = ks
+        LOOP = asyncio.get_event_loop()
+        self.followers_cons = {} 
+        # não estou a inicialializar as conexões para os followers
+        # porque pensando num contexto real a maior parte das vezes um utilizador
+        # vai à aplicação e não quer enviar nenhuma mensagem, pelo que criar todas
+        # as conexões sempre não seria o ideal
+        print("OKEY")
+        self.following_cons = {}
+        self.listener = Listener(self.address, self.port)
         self.listener.start()
 
     def get_username(self):
@@ -131,52 +102,66 @@ class Node:
 
         # add to timeline
         TIMELINE.add_message(USERNAME, message, msg_id, time)
-        # increment vetor clock
-        # create message
-        # send message
-        print("ola")
-        print(followers)
-        print(followers.values())
-        for follower in followers.keys():
-            if follower not in self.connections:
-                print(followers.get(follower))
-                (reader, writer) = await asyncio.open_connection(followers.get(follower)[0], followers.get(follower)[1],
-                loop=asyncio.get_event_loop())
-                self.connections[follower] = (reader, writer)
 
-            (reader, writer) = self.connections.get(follower)
-            data = {
-                "post": {
-                    "username": USERNAME,
-                    "message": message,
-                    "id": msg_id,
-                    "time": time.strftime('%Y-%m-%d %H:%M:%S')
-                }
+        data = {
+            "post": {
+                "username": USERNAME,
+                "message": message,
+                "id": msg_id,
+                "time": time.strftime('%Y-%m-%d %H:%M:%S')
             }
-            json_string = json.dumps(data) + '\n'
-            print(json_string)
-            print(len(json_string))
-            # writer.write((len(json_string)).to_bytes(2, byteorder='big'))
-            writer.write(json_string.encode())  
+        }
+        json_string = json.dumps(data) + '\n'
+
+        for follower in followers.keys():
+            try:          
+                try:
+                    if (follower not in self.followers_cons):
+                        print(followers.get(follower))
+                        (reader, writer) = await asyncio.open_connection(followers.get(follower)[0], followers.get(follower)[1],
+                        loop=asyncio.get_event_loop())
+                        self.followers_cons[follower] = (reader, writer)
+
+                    writer.write(json_string.encode())
+                except ConnectionRefusedError:
+                    pass
+                except UnboundLocalError:
+                    #não conseguimos fazer write porque o utilizador se desconectou e a conexão guardada já n serve
+                    (reader, writer) = await asyncio.open_connection(followers.get(follower)[0], followers.get(follower)[1],
+                    loop=asyncio.get_event_loop())
+                    self.followers_cons[follower] = (reader, writer)
+                    writer.write(json_string.encode())
+            except Exception:
+                pass
+  
 
     def show_timeline(self):
         global TIMELINE
         print(TIMELINE)
 
-    async def follow_user(self, ip, port, loop, to_follow):
+    async def follow_user(self, to_follow, loop):
         global USERNAME
+
+        my_info = await KS.get_user(USERNAME)
+
+        if to_follow in my_info["following"]:
+            print("You already follow that user!!")
+
+        (ip, port) = await KS.get_user_ip(to_follow)
 
         if to_follow == USERNAME:
             print("You can't follow yourself!")
             return
 
         try: 
-            (reader, writer) = await asyncio.open_connection(ip, port,
-            loop=loop)
+            (reader, writer) = await asyncio.open_connection(ip, port, loop=loop)
         except Exception:
             print("It's not possible to follow that user right now! (user offline)")
             return
         
+        my_info["following"].append(to_follow)
+        value = json.dumps(my_info)
+        await KS.set_user(USERNAME, value)
         data = {
             "follow": {
                 "username": USERNAME
@@ -187,7 +172,6 @@ class Node:
         data = (await reader.readline()).strip()
         writer.close()
 
-        print(data.decode())
         if data.decode() == '1':
             print("You followed %s successfully" % to_follow)
         else:

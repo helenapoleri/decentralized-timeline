@@ -13,11 +13,6 @@ class KademliaServer:
         self.ip = ip
         self.port = port
         self.loop = None
-    def start_server(self, bootstrap_nodes): 
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.server = None
 
     def start_server(self, bootstrap_nodes): 
         handler = logging.StreamHandler()
@@ -40,18 +35,21 @@ class KademliaServer:
         # bootstrap_node = (bt_Ip, int(bt_port))
         self.loop.run_until_complete(self.server.bootstrap(bootstrap_nodes))
 
-        return (self.server, self.loop)
+        return self.loop
 
     async def register(self, username):
         result = await self.server.get(username)
         if result is None:
             value = {
                 "followers": [],
+                "following": [],
                 "ip": self.ip,
                 "port": self.port
             }
             value = json.dumps(value)
             await self.server.set(username, value)
+            return value
+
         else:
             raise Exception("Username already exists")
     
@@ -62,11 +60,13 @@ class KademliaServer:
         if result is not None:
             value = {
                 "followers": result['followers'],
+                "following": result['following'],
                 "ip": self.ip,
                 "port": self.port
             }
             value = json.dumps(value)
             await self.server.set(username, value)
+            return value
 
         else:
             raise Exception("User doesn't exist! Please register")
@@ -88,8 +88,27 @@ class KademliaServer:
             result = await self.server.get(follower)
             result = json.loads(result)
             if result is not None:
-                print("cooooooooooooooomoooo")
                 followers[follower] = (result["ip"], result["port"])
         
         return followers
+
+    async def get_user_following(self, username):
+        following = {}
+        result = await self.server.get(username)
+        result = json.loads(result)
+        for follw in result["following"]:
+            result = await self.server.get(follw)
+            result = json.loads(result)
+            if result is not None:
+                following[follw] = (result["ip"], result["port"])
+        
+        return following
+
+    async def get_user(self, username):
+        result = await self.server.get(username)
+        result = json.loads(result)
+        return result
+
+    async def set_user(self, username, value):
+        await self.server.set(username, value)
 
