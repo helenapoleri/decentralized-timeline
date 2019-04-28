@@ -95,6 +95,13 @@ class KademliaServer:
 
         return followers
 
+    async def get_users_following_user(self, user):
+        user = await self.get_user(user)
+        user_followers = user['followers']
+        return user_followers
+
+
+
     async def get_outdated_user_following(self, following):
         res = []
 
