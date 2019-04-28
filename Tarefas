@@ -7,7 +7,6 @@ se recebe uma mansagem ou alocamos uma tarefa de certo em certo tempo
 - Fazer a cena de hierarquias
 - Quando um nodo se liga, percorrer os vizinhos de forma a manter-se atualizado,
 perguntando aos outros followers, caso se encontre desatualizado
-
 - No node, existem situações em que estamos a ir buscar a nossa informação ao kademlia
 facilmente a poderiamos ter em memória por motivos de performance
 

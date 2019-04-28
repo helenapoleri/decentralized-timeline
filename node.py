@@ -1,6 +1,6 @@
 import asyncio
 import json
-import utils.snowflake as snowflake
+import utils.flake as flake
 from datetime import datetime
 
 from threading import Thread
@@ -18,7 +18,6 @@ async def node_server(reader, writer):
     global LIST_LOOP, TIMELINE, KS
 
     while True:
-
         data = (await reader.readline()).strip()   #Payload
         if not data:
             break
@@ -80,7 +79,7 @@ class Node:
         self.address = address
         self.port = port
         self.state = state
-        self.id_generator = snowflake.generator(1,1)
+        self.id_generator = flake.generator(self.port)
         KS = ks
         LOOP = asyncio.get_event_loop()
         self.followers_cons = {} 
@@ -99,7 +98,7 @@ class Node:
         global USERNAME, TIMELINE
         
         msg_id = self.id_generator.__next__()
-        time = snowflake.snowflake_to_datetime(msg_id)
+        time = datetime.strptime(flake.get_time_from_id(msg_id), "%a %b %d %H:%M:%S %Y")
 
         # add to timeline
         TIMELINE.add_message(USERNAME, message, msg_id, time)

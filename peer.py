@@ -8,7 +8,6 @@ import sys
 import asyncio
 import settings
 from utils.prompt import Prompt
-from aioconsole import ainput
 
 from threading import Thread
 from kademlia_server import KademliaServer
