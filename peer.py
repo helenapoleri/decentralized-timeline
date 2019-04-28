@@ -28,7 +28,7 @@ async def post_message():
     message = await PROMPT("Enter Message: \n")
 
     try:
-        followers = await KS.get_user_followers(NODE.get_state())
+        followers = await KS.get_user_followers(NODE.get_username())
     except Exception as e:
         print(e)
 

@@ -3,6 +3,7 @@ import json
 import utils.flake as flake
 from datetime import datetime
 
+from numpy.random import choice
 from threading import Thread
 from timeline import Timeline
 from kademlia.network import Server
@@ -14,9 +15,11 @@ STATE = None
 LIST_LOOP = None
 TIMELINE = None
 NODE = None
+FOLLOWERS_CONS = None
+REDIRECT_CONS = None
 
 async def node_server(reader, writer):
-    global LIST_LOOP, TIMELINE, KS, STATE
+    global LIST_LOOP, TIMELINE, KS, STATE, FOLLOWERS_CONS, LOOP
 
     while True:
         data = (await reader.readline()).strip()
@@ -32,6 +35,42 @@ async def node_server(reader, writer):
 
             if new_follower in STATE['followers']:
                 writer.write(b'0\n')
+            elif len(STATE['followers']) > 2:
+                followers = await KS.get_user_followers(USERNAME)
+                usernames = list(followers.keys())
+                weights = [len(z) for (y, w, z) in followers.values()]
+                # Invert weights -> less probable if less followers
+                weights = [1.0 / (w+.001) for w in weights]
+                sum_weights = sum(weights)
+                # Normalization
+                weights = [w / sum_weights for w in weights]
+
+                draw_followers = choice(usernames, 1, p=weights)
+                draw_cons = []
+
+                for flw in draw_followers:
+                    (r, w) = await asyncio.open_connection(
+                        followers.get(flw)[0],
+                        followers.get(flw)[1],
+                        loop=asyncio.get_event_loop())
+                    draw_cons.append((r, w))
+
+                data = {
+                    "redirect": {
+                        "from": USERNAME,
+                        "to": new_follower
+                    }
+                }
+
+                json_string = json.dumps(data) + '\n'
+
+                for (r, w) in draw_cons:
+                    w.write(json_string.encode())
+
+                # TODO: Wait for responses, can they be negative? (ex: person
+                # can't redirect messages)
+
+                writer.write(b'1\n')
             else:
                 STATE["followers"].append(new_follower)
                 value = json.dumps(STATE)
@@ -47,9 +86,10 @@ async def node_server(reader, writer):
             msg_nr = data["post"]["msg_nr"]
             time = flake.get_datetime_from_id(data["post"]["id"])
             user_knowledge = STATE["following"][sender][0]
-            TIMELINE.add_message(sender, message, msg_id, msg_nr, time, user_knowledge)
+            TIMELINE.add_message(sender, message, msg_id, msg_nr, time,
+                                 user_knowledge)
 
-            if (user_knowledge == None or msg_nr == user_knowledge + 1):
+            if (user_knowledge is None or msg_nr == user_knowledge + 1):
                 STATE["following"][sender] = (msg_nr, msg_id)
                 value = json.dumps(STATE)
                 future = asyncio.run_coroutine_threadsafe(
@@ -60,27 +100,58 @@ async def node_server(reader, writer):
                 # TODO - questionar por mais informação
                 pass
 
+            # Redirect messages if needed
+            if sender in STATE["redirect"]:
+                for to_redirect in STATE["redirect"][sender]:
+
+                    if to_redirect not in REDIRECT_CONS:
+                        # GET HIS INFO (ADDRESS, PORT)
+                        future = asyncio.run_coroutine_threadsafe(
+                                KS.get_user(to_redirect),
+                                LOOP)
+                        result = future.result()
+
+                        # OPEN CONNECTION
+                        REDIRECT_CONS[to_redirect] = await \
+                            asyncio.open_connection(
+                                    result["ip"],
+                                    result["port"],
+                                    loop=asyncio.get_event_loop())
+
+                    (r, w) = REDIRECT_CONS[to_redirect]
+
+                    w.write((json.dumps(data) + '\n').encode())
+
         elif 'online' in data:
             username = data['online']['username']
             NODE.add_follower_connection(username, reader, writer)
 
+        elif 'redirect' in data:
+            org = data["redirect"]["from"]
+            dst = data["redirect"]["to"]
+
+            if org in STATE["redirect"]:
+                STATE["redirect"].get(org).append(dst)
+            else:
+                STATE["redirect"][org] = [dst]
+
+            value = json.dumps(STATE)
+            future = asyncio.run_coroutine_threadsafe(
+                                KS.set_user(USERNAME, value),
+                                LOOP)
+            future.result()
         elif 'msgs_request' in data:
-            print(0)
+
             user = data["msgs_request"]["username"]
-            print(1)
             messages_ids = data["msgs_request"]["messages"]
-            print(2)
             messages = TIMELINE.get_user_messages(user, messages_ids)
 
             data = {
                 "messages": messages
             }
-            print(3)
+ 
             json_string = json.dumps(data) + '\n'
-            print(4)
             writer.write(json_string.encode())
-            print(5)
-            
 
         await writer.drain()
 
@@ -109,6 +180,7 @@ class Listener(Thread):
 class Node:
     def __init__(self, address, port, username, ks, state):
         global KS, LOOP, USERNAME, TIMELINE, NODE, STATE
+        global FOLLOWERS_CONS, REDIRECT_CONS
 
         TIMELINE = Timeline(username)
         USERNAME = username
@@ -118,7 +190,8 @@ class Node:
         self.address = address
         self.port = port
         self.id_generator = flake.generator(self.port)
-        self.followers_cons = {}
+        FOLLOWERS_CONS = {}
+        REDIRECT_CONS = {}
         # não estou a inicialializar as conexões para os followers
         # porque pensando num contexto real a maior parte das vezes
         # um utilizador vai à aplicação e não quer enviar nenhuma
@@ -139,7 +212,7 @@ class Node:
         return STATE
 
     async def post_message(self, message, followers):
-        global USERNAME, TIMELINE, STATE
+        global USERNAME, TIMELINE, STATE, FOLLOWERS_CONS
 
         msg_id = self.id_generator.__next__()
         time = flake.get_datetime_from_id(msg_id)
@@ -161,13 +234,13 @@ class Node:
         for follower in followers.keys():
             try:
                 try:
-                    if follower not in self.followers_cons:
+                    if follower not in FOLLOWERS_CONS:
                         (reader, writer) = await asyncio.open_connection(
                                         followers.get(follower)[0],
                                         followers.get(follower)[1],
                                         loop=asyncio.get_event_loop())
 
-                    self.followers_cons[follower] = (reader, writer)
+                    FOLLOWERS_CONS[follower] = (reader, writer)
                     writer.write(json_string.encode())
                 except ConnectionRefusedError:
                     pass
@@ -178,7 +251,7 @@ class Node:
                                     followers.get(follower)[0],
                                     followers.get(follower)[1],
                                     loop=asyncio.get_event_loop())
-                    self.followers_cons[follower] = (reader, writer)
+                    FOLLOWERS_CONS[follower] = (reader, writer)
                     writer.write(json_string.encode())
             except Exception:
                 pass
@@ -189,7 +262,8 @@ class Node:
         await KS.set_user(USERNAME, value)
 
     async def update_timeline_messages(self):
-        outdated_follw = await KS.get_outdated_user_following(STATE["following"])
+        outdated_follw = await KS.get_outdated_user_following(
+                                  STATE["following"])
 
         for (follw, ip, port, user_knowledge) in outdated_follw:
             current_knowledge = STATE["following"][follw][0]
@@ -268,9 +342,12 @@ class Node:
         if data.decode() == '1':
             print("You followed %s successfully" % to_follow)
 
-            STATE["following"][to_follow] = (None, self.id_generator.__next__())
+            STATE["following"][to_follow] = (None, 
+                                             self.id_generator.__next__())
             value = json.dumps(STATE)
+
             await KS.set_user(USERNAME, value)
+
         else:
             print("It's not possible to follow %s (already followed)"
                   % to_follow)
