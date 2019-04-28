@@ -193,42 +193,38 @@ class Node:
 
         for (follw, ip, port, user_knowledge) in outdated_follw:
             current_knowledge = STATE["following"][follw][0]
+
+            waiting_msgs = TIMELINE.user_waiting_messages(follw)
+            wanted_msgs = []
+
+            for msg_nr in range(current_knowledge + 1, user_knowledge + 1):
+                if msg_nr not in waiting_msgs:
+                    wanted_msgs.append(msg_nr)
+
             try:
-                (reader, writer) = await asyncio.open_connection(ip, port, loop=LOOP)
-                waiting_msgs = TIMELINE.user_waiting_messages(follw)
-                wanted_msgs = []
-
-                for msg_nr in range(current_knowledge + 1, user_knowledge + 1):
-
-                    if msg_nr not in waiting_msgs:
-                        print(msg_nr)
-                        wanted_msgs.append(msg_nr)
-
-                data = {
-                    "msgs_request": {
-                        "username": follw,
-                        "messages": wanted_msgs
-                    }
-                }
-
-                json_string = json.dumps(data) + '\n'
-                writer.write(json_string.encode())
-                data = (await reader.readline()).strip()
-                writer.close()
-
-                json_string = data.decode()
-                data = json.loads(json_string)
-                messages = data["messages"]
-
+                messages = await request_messages(follw, wanted_msgs, ip, port)
                 await handle_messages(messages)
 
             except ConnectionRefusedError:
+                print("burra")
                 user_followers = await KS.get_users_following_user(follw)
-
-                pass
-
-            # se não conseguir:
-                # ir contactando todos os vizinhos de forma a aumentar o meu conhecimento
+                for user in user_followers:
+                    current_knowledge = STATE["following"][follw][0]
+                    if (current_knowledge < user_knowledge):
+                        info = await KS.get_user(user)
+                        if info['following'][follw][0] > current_knowledge:
+                            try:
+                                messages = await request_messages(follw, wanted_msgs, info['ip'], info['port'])
+                                await handle_messages(messages)
+                                for msg in messages:
+                                    wanted_msgs.remove(msg['msg_nr'])
+                                    
+                            except ConnectionRefusedError:
+                                continue
+                        else:
+                            continue
+                    else:
+                        break
 
 
     def show_timeline(self):
@@ -293,3 +289,22 @@ async def handle_messages(messages):
     STATE["following"][sender] = (msg_nr, msg_id)
     value = json.dumps(STATE)
     await KS.set_user(USERNAME, value)
+
+async def request_messages(user, wanted_msgs, ip, port):
+    (reader, writer) = await asyncio.open_connection(ip, port, loop=LOOP)
+
+    data = {
+        "msgs_request": {
+            "username": user,
+            "messages": wanted_msgs
+        }
+    }
+
+    json_string = json.dumps(data) + '\n'
+    writer.write(json_string.encode())
+    data = (await reader.readline()).strip()
+    writer.close()
+
+    json_string = data.decode()
+    data = json.loads(json_string)
+    return data["messages"]
