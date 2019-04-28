@@ -18,24 +18,27 @@ async def node_server(reader, writer):
     global LIST_LOOP, TIMELINE, KS
 
     while True:
+
         data = (await reader.readline()).strip()   #Payload
         if not data:
             break
         json_string = data.decode()
-        print(json_string)
         data = json.loads(json_string)
-        print(data)
-        if "follow" in data:
-            new_follower = data["follow"]["username"]
-            info = await KS.get_user(USERNAME)
 
+        if "follow" in data:
+
+            new_follower = data["follow"]["username"]
+            future = asyncio.run_coroutine_threadsafe(KS.get_user(USERNAME), LOOP)
+            info = future.result()
             if new_follower in info['followers']:
                 writer.write(b'0\n')
             else:
                 info["followers"].append(new_follower)
                 value = json.dumps(info)
-                await KS.set_user(USERNAME, value)
+                future = asyncio.run_coroutine_threadsafe(KS.set_user(USERNAME, value), LOOP)
+                future.result()
                 writer.write(b'1\n')
+
 
         elif 'post' in data:
             sender = data["post"]["username"]
@@ -66,7 +69,6 @@ class Listener(Thread):
     def run(self):
         global LIST_LOOP
         LIST_LOOP = asyncio.new_event_loop()
-        #asyncio.set_event_loop(loop)
         result = LIST_LOOP.run_until_complete(self.start_listener())
 
 class Node:
@@ -86,7 +88,6 @@ class Node:
         # porque pensando num contexto real a maior parte das vezes um utilizador
         # vai à aplicação e não quer enviar nenhuma mensagem, pelo que criar todas
         # as conexões sempre não seria o ideal
-        print("OKEY")
         self.following_cons = {}
         self.listener = Listener(self.address, self.port)
         self.listener.start()
@@ -117,7 +118,6 @@ class Node:
             try:          
                 try:
                     if (follower not in self.followers_cons):
-                        print(followers.get(follower))
                         (reader, writer) = await asyncio.open_connection(followers.get(follower)[0], followers.get(follower)[1],
                         loop=asyncio.get_event_loop())
                         self.followers_cons[follower] = (reader, writer)
@@ -155,21 +155,27 @@ class Node:
 
         try: 
             (reader, writer) = await asyncio.open_connection(ip, port, loop=loop)
+
         except Exception:
             print("It's not possible to follow that user right now! (user offline)")
             return
-        
+
         my_info["following"].append(to_follow)
         value = json.dumps(my_info)
+
         await KS.set_user(USERNAME, value)
+
         data = {
             "follow": {
                 "username": USERNAME
             }
         }
+
         json_string = json.dumps(data) + '\n'
         writer.write(json_string.encode())
+
         data = (await reader.readline()).strip()
+
         writer.close()
 
         if data.decode() == '1':
