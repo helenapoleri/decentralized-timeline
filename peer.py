@@ -29,7 +29,6 @@ async def post_message():
 
     try:
         followers = await KS.get_user_followers(NODE.get_state())
-        print(followers)
     except Exception as e:
         print(e)
 

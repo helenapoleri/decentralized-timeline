@@ -21,8 +21,6 @@ async def node_server(reader, writer):
     while True:
         data = (await reader.readline()).strip()
 
-        print(data)
-
         if not data:
             break
 
@@ -83,12 +81,12 @@ class Node:
 
         TIMELINE = Timeline(username)
         USERNAME = username
-        self.address = address
-        self.port = port
         STATE = state
-        self.id_generator = flake.generator(self.port)
         KS = ks
         LOOP = asyncio.get_event_loop()
+        self.address = address
+        self.port = port
+        self.id_generator = flake.generator(self.port)
         self.followers_cons = {}
         # não estou a inicialializar as conexões para os followers
         # porque pensando num contexto real a maior parte das vezes
@@ -157,6 +155,7 @@ class Node:
 
     def show_timeline(self):
         global TIMELINE
+
         print(TIMELINE)
 
     async def follow_user(self, to_follow, loop):

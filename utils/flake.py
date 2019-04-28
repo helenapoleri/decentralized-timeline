@@ -9,9 +9,13 @@ epoch = 1556393400000
 
 
 def get_time_from_id(id):
+    return ctime(get_timestamp_from_id(id))
+
+
+def get_timestamp_from_id(id):
     diff = int(id >> 16 + 32)
     timestamp = int(epoch/1000 + diff/1000)
-    return ctime(timestamp)
+    return timestamp
 
 
 def id_builder(timestamp, port, seq_number):
