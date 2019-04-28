@@ -45,6 +45,7 @@ class KademliaServer:
             value = {
                 "followers": [],
                 "following": {},
+                "redirect": {},
                 "msg_nr": 0,
                 "ip": self.ip,
                 "port": self.port
@@ -64,6 +65,7 @@ class KademliaServer:
             value = {
                 "followers": result['followers'],
                 "following": result['following'],
+                "redirect": result['redirect'],
                 "msg_nr": result['msg_nr'],
                 "ip": self.ip,
                 "port": self.port
@@ -84,25 +86,32 @@ class KademliaServer:
         else:
             return (result["ip"], result["port"])
 
-    async def get_user_followers(self, state):
+    async def get_user_followers(self, username):
         followers = {}
 
-        for follower in state["followers"]:
+        result = await self.get_user(username)
+
+        for follower in result["followers"]:
             result = await self.server.get(follower)
             result = json.loads(result)
             if result is not None:
-                followers[follower] = (result["ip"], result["port"])
+                followers[follower] = (result["ip"],
+                                       result["port"],
+                                       result["followers"])
 
         return followers
 
-    async def get_user_following(self, state):
+    async def get_user_following(self, username):
         following = {}
 
-        for follw in state["following"]:
+        result = await self.get_user(username)
+
+        for follw in result["following"]:
             result = await self.server.get(follw)
             result = json.loads(result)
             if result is not None:
-                following[follw] = (result["ip"], result["port"])
+                following[follw] = (result["ip"],
+                                    result["port"])
 
         return following
 

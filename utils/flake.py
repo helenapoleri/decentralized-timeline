@@ -1,7 +1,7 @@
 
 import ntplib
 
-from time import ctime
+from time import ctime, time
 from socket import inet_aton, error
 from datetime import datetime
 
@@ -15,8 +15,10 @@ def get_datetime_now():
     time = datetime.strptime(now_str, "%a %b %d %H:%M:%S %Y")
     return time
 
+
 def get_datetime_from_id(id):
     return datetime.strptime(get_time_from_id(id), "%a %b %d %H:%M:%S %Y")
+
 
 def get_time_from_id(id):
     return ctime(get_timestamp_from_id(id))
