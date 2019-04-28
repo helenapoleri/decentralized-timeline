@@ -15,7 +15,6 @@ from node import Node
 from menu.menu import Menu
 from menu.menu_item import MenuItem
 
-SERVER = None
 LOOP = None
 NODE = None
 PROMPT = None
@@ -42,8 +41,7 @@ async def follow_user():
     username = await PROMPT("Enter username: ")
 
     try:
-        (ip, port) = await KS.get_user_ip(username)
-        await NODE.follow_user(ip, port, LOOP, username)
+        await NODE.follow_user(username, LOOP)
     except Exception as e:
         print(e)
         return
@@ -55,13 +53,13 @@ def show_timeline():
     NODE.show_timeline()
 
 async def login():
-    global NODE, SERVER, KS, PROMPT
+    global NODE, KS, PROMPT
 
     username = await PROMPT("Username: ")
 
     try:
         state = await KS.login(username)
-        NODE = Node(address, port, username, SERVER, state)
+        NODE = Node(address, port, username, KS, state)
         print("Login com sucesso!")
         
         return 1
@@ -71,13 +69,13 @@ async def login():
         return 0
 
 async def register(address, port):
-    global NODE, KS, SERVER, PROMPT
+    global NODE, KS, PROMPT
 
     username = await PROMPT("Username: ")
 
     try:
-        await KS.register(username)
-        NODE = Node(address, port, username, SERVER)
+        state = await KS.register(username)
+        NODE = Node(address, port, username, KS, state)
         print("Registado com sucesso!")
         return 1
         
@@ -118,12 +116,12 @@ def run_auth_menu():
             run_main_menu()
 
 def main(address, port):
-    global KS, LOOP, SERVER, PROMPT
+    global KS, LOOP, PROMPT
     
     bt_addresses_p = [address_port.split(":") for address_port in settings.BOOTSTRAP_NODES.split(",")]
     bt_addresses = [(x, int(y)) for [x, y] in bt_addresses_p]
     KS = KademliaServer(address, port)
-    (SERVER, LOOP) = KS.start_server(bt_addresses)
+    LOOP = KS.start_server(bt_addresses)
 
     PROMPT = Prompt(LOOP)
 

@@ -9,7 +9,16 @@ se recebe uma mansagem ou alocamos uma tarefa de certo em certo tempo
 - Quando um nodo se liga, percorrer os vizinhos de forma a manter-se atualizado,
 perguntando aos outros followers, caso se encontre desatualizado
 - Refinar os timestamps, para zonas etc
+- No node, existem situações em que estamos a ir buscar a nossa informação ao kademlia
+facilmente a poderiamos ter em memória por motivos de performance
 
 Terminados:
 - (talvez ter a variavel global de politica de descartagem num ficheiro
 de configuração bem como todas as outras configurações) (DONE)
+
+Coisas a meter no relatório:
+- Explicar como resolvemos os "following" isto é, criar conexões quando 
+entramos na aplicação, e a dificuldade com a possível grande cardinalidade
+de pessoas a seguir. A solução ideal seria talvez criar de alguma forma uma
+rede por cima do kademlia que fosse ligada de tal forma a chegar a todos os followers
+e following e depois usar talvez multicasts??? i dont know
