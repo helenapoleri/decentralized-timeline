@@ -44,7 +44,7 @@ async def node_server(reader, writer):
             sender = data["post"]["username"]
             message = data["post"]["message"]
             msg_id = data["post"]["id"]
-            time = datetime.strptime(data["post"]["time"], '%Y-%m-%d %H:%M:%S')
+            time = flake.get_datetime_from_id(data["post"]["id"])
             TIMELINE.add_message(sender, message, msg_id, time)
 
         elif 'online' in data:
@@ -111,8 +111,7 @@ class Node:
         global USERNAME, TIMELINE
 
         msg_id = self.id_generator.__next__()
-        time = datetime.strptime(flake.get_time_from_id(msg_id),
-                                 "%a %b %d %H:%M:%S %Y")
+        time = flake.get_datetime_from_id(msg_id)
 
         # add to timeline
         TIMELINE.add_message(USERNAME, message, msg_id, time)
@@ -121,8 +120,7 @@ class Node:
             "post": {
                 "username": USERNAME,
                 "message": message,
-                "id": msg_id,
-                "time": time.strftime('%Y-%m-%d %H:%M:%S')
+                "id": msg_id
             }
         }
 
@@ -152,6 +150,9 @@ class Node:
                     writer.write(json_string.encode())
             except Exception:
                 pass
+
+    def update_timeline_messages(self):
+	    pass
 
     def show_timeline(self):
         global TIMELINE
@@ -194,7 +195,7 @@ class Node:
         if data.decode() == '1':
             print("You followed %s successfully" % to_follow)
 
-            STATE["following"].append(to_follow)
+            STATE["following"][to_follow] = (None, self.id_generator.__next__())
             value = json.dumps(STATE)
 
             await KS.set_user(USERNAME, value)

@@ -60,6 +60,7 @@ async def login():
     try:
         state = await KS.login(username)
         NODE = Node(address, port, username, KS, state)
+        await NODE.update_timeline_messages()
         print("Login com sucesso!")
 
         return 1

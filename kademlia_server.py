@@ -44,7 +44,8 @@ class KademliaServer:
         if result is None:
             value = {
                 "followers": [],
-                "following": [],
+                "following": {},
+                "msg_nr": 0,
                 "ip": self.ip,
                 "port": self.port
             }
@@ -63,6 +64,7 @@ class KademliaServer:
             value = {
                 "followers": result['followers'],
                 "following": result['following'],
+                "msg_nr": result['msg_nr'],
                 "ip": self.ip,
                 "port": self.port
             }

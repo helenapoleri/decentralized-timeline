@@ -2,6 +2,7 @@ import json
 import os
 import configparser
 import settings
+import utils.flake as flake
 
 from datetime import datetime, timedelta
 
@@ -48,7 +49,7 @@ class Timeline:
 
         self.save_messages()
 
-        messages = sorted(messages, key=lambda x: x['time'], reverse=True)
+        messages = sorted(messages, key=lambda x: x['id'], reverse=True)
 
         result = ""
 
@@ -82,7 +83,8 @@ class Timeline:
 
     def discard_messages(self):
         max_duration = timedelta(seconds=DISCARD_BASELINE)
-        discard_time = datetime.now() - max_duration
+
+        discard_time = flake.get_datetime_now() - max_duration
 
         for user, msgs in self.messages.items():
             if user == self.username:

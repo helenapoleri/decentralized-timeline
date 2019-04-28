@@ -3,10 +3,20 @@ import ntplib
 
 from time import ctime
 from socket import inet_aton, error
+from datetime import datetime
 
 # 27 April 2019 20:30:00 GMT
 epoch = 1556393400000
 
+
+def get_datetime_now():
+    now = timestamp_now()
+    now_str = ctime(now/1000)
+    time = datetime.strptime(now_str, "%a %b %d %H:%M:%S %Y")
+    return time
+
+def get_datetime_from_id(id):
+    return datetime.strptime(get_time_from_id(id), "%a %b %d %H:%M:%S %Y")
 
 def get_time_from_id(id):
     return ctime(get_timestamp_from_id(id))
