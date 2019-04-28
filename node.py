@@ -85,14 +85,20 @@ async def node_server(reader, writer):
             msg_id = data["post"]["id"]
             msg_nr = data["post"]["msg_nr"]
             time = flake.get_datetime_from_id(data["post"]["id"])
-            TIMELINE.add_message(sender, message, msg_id, msg_nr, time)
+            user_knowledge = STATE["following"][sender][0]
+            TIMELINE.add_message(sender, message, msg_id, msg_nr, time,
+                                 user_knowledge)
 
-            STATE["following"][sender] = (msg_nr, msg_id)
-            value = json.dumps(STATE)
-            future = asyncio.run_coroutine_threadsafe(
-                                KS.set_user(USERNAME, value),
-                                LOOP)
-            future.result()
+            if (user_knowledge is None or msg_nr == user_knowledge + 1):
+                STATE["following"][sender] = (msg_nr, msg_id)
+                value = json.dumps(STATE)
+                future = asyncio.run_coroutine_threadsafe(
+                                    KS.set_user(USERNAME, value),
+                                    LOOP)
+                future.result()
+            else:
+                # TODO - questionar por mais informação
+                pass
 
             # Redirect messages if needed
             if sender in STATE["redirect"]:
@@ -134,6 +140,22 @@ async def node_server(reader, writer):
                                 KS.set_user(USERNAME, value),
                                 LOOP)
             future.result()
+        elif 'msgs_request' in data:
+            print(0)
+            user = data["msgs_request"]["username"]
+            print(1)
+            messages_ids = data["msgs_request"]["messages"]
+            print(2)
+            messages = TIMELINE.get_user_messages(user, messages_ids)
+
+            data = {
+                "messages": messages
+            }
+            print(3)
+            json_string = json.dumps(data) + '\n'
+            print(4)
+            writer.write(json_string.encode())
+            print(5)
 
         await writer.drain()
 
@@ -211,9 +233,6 @@ class Node:
             }
         }
 
-        # incrementar contagem das mensagens
-        STATE['msg_nr'] += 1
-
         json_string = json.dumps(data) + '\n'
 
         for follower in followers.keys():
@@ -241,8 +260,55 @@ class Node:
             except Exception:
                 pass
 
-    def update_timeline_messages(self):
-        pass
+        # incrementar contagem das mensagens
+        STATE['msg_nr'] += 1
+        value = json.dumps(STATE)
+        await KS.set_user(USERNAME, value)
+
+    async def update_timeline_messages(self):
+        outdated_follw = await KS.get_outdated_user_following(
+                                  STATE["following"])
+
+        for (follw, ip, port, user_knowledge) in outdated_follw:
+            current_knowledge = STATE["following"][follw][0]
+            try:
+                (reader, writer) = await asyncio.open_connection(ip, port,
+                                                                 loop=LOOP)
+                waiting_msgs = TIMELINE.user_waiting_messages(follw)
+                wanted_msgs = []
+
+                for msg_nr in range(current_knowledge + 1, user_knowledge + 1):
+
+                    if msg_nr not in waiting_msgs:
+                        print(msg_nr)
+                        wanted_msgs.append(msg_nr)
+
+                data = {
+                    "msgs_request": {
+                        "username": follw,
+                        "messages": wanted_msgs
+                    }
+                }
+
+                json_string = json.dumps(data) + '\n'
+                writer.write(json_string.encode())
+                data = (await reader.readline()).strip()
+                writer.close()
+
+                json_string = data.decode()
+                data = json.loads(json_string)
+                messages = data["messages"]
+
+                await handle_messages(messages)
+
+            except ConnectionRefusedError:
+                user_followers = await KS.get_users_following_user(follw)
+
+                pass
+
+            # se não conseguir:
+            # ir contactando todos os vizinhos de forma a aumentar
+            # o meu conhecimento
 
     def show_timeline(self):
         global TIMELINE
@@ -285,7 +351,8 @@ class Node:
         if data.decode() == '1':
             print("You followed %s successfully" % to_follow)
 
-            STATE["following"][to_follow] = (None, self.id_generator.__next__())
+            STATE["following"][to_follow] = (None, 
+                                             self.id_generator.__next__())
             value = json.dumps(STATE)
 
             await KS.set_user(USERNAME, value)
@@ -293,3 +360,18 @@ class Node:
         else:
             print("It's not possible to follow %s (already followed)"
                   % to_follow)
+
+
+async def handle_messages(messages):
+
+    for msg in messages:
+        sender = msg["name"]
+        message = msg["message"]
+        msg_id = msg["id"]
+        msg_nr = msg["msg_nr"]
+        time = flake.get_datetime_from_id(msg_id)
+        TIMELINE.add_message(sender, message, msg_id, msg_nr, time)
+
+    STATE["following"][sender] = (msg_nr, msg_id)
+    value = json.dumps(STATE)
+    await KS.set_user(USERNAME, value)

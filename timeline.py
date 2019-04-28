@@ -37,15 +37,14 @@ class TimelineEntry:
 class Timeline:
     def __init__(self, username):
         self.username = username
-        self.messages = self.get_timeline()
-        self.discard_messages()
+        self.get_timeline()
 
     def __repr__(self):
 
         # messages = [msg for msgs in self.messages.values() for msg in msgs]
         messages = []
         for msgs in self.messages.values():
-            for msg in msgs:
+            for msg in msgs.values():
                 msg['seen'] = True
                 messages.append(msg)
 
@@ -65,23 +64,21 @@ class Timeline:
 
         return self.username + "'s TIMELINE" + "\n" + result
 
-    def save_messages(self):
-        messages = {}
-        for user, msgs in self.messages.items():
-            user_msgs = []
-            for msg in msgs:
-                new_msg = dict(msg)
-                new_msg['time'] = new_msg['time'].strftime('%Y-%m-%d %H:%M:%S')
-                user_msgs.append(new_msg)
-            messages[user] = user_msgs
+    def get_user_messages(self, user, msgs_idx):
 
-        if not os.path.isdir('messages'):
-            os.mkdir('messages')
+        msgs = []
+        for msg_idx in msgs_idx:
+            if msg_idx in self.messages[user]:
+                msg = self.messages[user][msg_idx]
+                msgs.append({
+                    "name": msg['name'],
+                    "message": msg['message'],
+                    "id": msg['id'],
+                    "msg_nr": msg['msg_nr']
+                })
 
-        filename = 'messages/' + self.username + '-messages.json'
+        return msgs
 
-        with open(filename, 'w') as outfile:
-            json.dump(messages, outfile)
 
     def discard_messages(self):
         max_duration = timedelta(seconds=DISCARD_BASELINE)
@@ -92,26 +89,45 @@ class Timeline:
             if user == self.username:
                 continue
 
-            for msg in msgs:
+            for msg_nr, msg in msgs.items():
                 if msg['time'] < discard_time and msg['seen']:
-                    msgs.remove(msg)
+                    msgs.pop(msg_nr)
                 else:
                     break
 
-        self.save_messages()
 
-    def add_message(self, user, message, msg_id, msg_nr, time):
+    def user_waiting_messages(self, follw):
+        if follw in self.waiting_messages:
+            return list(self.waiting_messages[follw].keys())
+        else:
+            return []
+
+    def add_message(self, user, message, msg_id, msg_nr, time, user_knowledge = None):
 
         timeline_entry = TimelineEntry(user, message, msg_id, msg_nr, time)
 
-        user_msgs = self.messages.get(user, [])
-        user_msgs.append(timeline_entry.get_dict())
+        if  (user_knowledge == None) or (msg_nr == user_knowledge + 1):
+            user_msgs = self.messages.get(user, {})
+            user_msgs[msg_nr] = (timeline_entry.get_dict())
+            user_knowledge = msg_nr
 
-        self.messages[user] = user_msgs
+            while(user_knowledge in self.waiting_messages):
+                msg = self.waiting_messages.pop(user_knowledge)
+                user_msgs[user_knowledge] = msg
+                user_knowledge += 1
+
+            self.messages[user] = user_msgs
+
+        elif msg_nr > user_knowledge + 1:
+            user_msgs = self.waiting_messages.get(user, {})
+            user_msgs[msg_nr] = (timeline_entry.get_dict())
+            self.waiting_messages[user] = user_msgs
+        else:
+            pass
 
         self.discard_messages()
-        # self.save_messages() #não é necessário porque já está a
-        # ser realizado no discard_messages()
+        self.save_messages()
+
 
     def get_timeline(self):
         try:
@@ -119,12 +135,65 @@ class Timeline:
             with open(filename, 'r') as infile:
                 data = json.load(infile)
                 for msgs in data.values():
-                    for msg in msgs:
+                    for msg in msgs.values():
                         msg['time'] = datetime.strptime(
                                                msg['time'],
                                                '%Y-%m-%d %H:%M:%S')
 
-                return data
-
+                self.messages = data
         except:
-            return {}
+            self.messages = {}
+
+        try:
+            filename = 'messages/' + self.username + '-w-messages.json'
+            with open(filename, 'r') as infile:
+                data = json.load(infile)
+                for msgs in data.values():
+                    for msg in msgs.values():
+                        msg['time'] = datetime.strptime(
+                                               msg['time'],
+                                               '%Y-%m-%d %H:%M:%S')
+
+                self.waiting_messages = data
+        except:
+            self.waiting_messages = {}
+
+    def save_messages(self):
+        self.save_current_messages()
+        self.save_waiting_messages()
+
+    def save_current_messages(self):
+        messages = {}
+        for user, msgs in self.waiting_messages.items():
+            user_msgs = {}
+            for msg_nr, msg in msgs.items():
+                new_msg = dict(msg)
+                new_msg['time'] = new_msg['time'].strftime('%Y-%m-%d %H:%M:%S')
+                user_msgs[msg_nr] = new_msg
+            messages[user] = user_msgs
+
+        if not os.path.isdir('messages'):
+            os.mkdir('messages')
+
+        filename = 'messages/' + self.username + '-messages.json'
+
+        with open(filename, 'w') as outfile:
+            json.dump(messages, outfile)
+
+    def save_waiting_messages(self):
+        messages = {}
+        for user, msgs in self.waiting_messages.items():
+            user_msgs = {}
+            for msg_nr, msg in msgs.items():
+                new_msg = dict(msg)
+                new_msg['time'] = new_msg['time'].strftime('%Y-%m-%d %H:%M:%S')
+                user_msgs[msg_nr] = new_msg
+            messages[user] = user_msgs
+
+        if not os.path.isdir('messages'):
+            os.mkdir('messages')
+
+        filename = 'messages/' + self.username + '-w-messages.json'
+
+        with open(filename, 'w') as outfile:
+            json.dump(messages, outfile)
