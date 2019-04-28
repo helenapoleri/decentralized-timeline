@@ -8,17 +8,19 @@ from kademlia.network import Server
 
 DEBUG = False
 
+
 class KademliaServer:
     def __init__(self, ip, port):
         self.ip = ip
         self.port = port
         self.loop = None
 
-    def start_server(self, bootstrap_nodes): 
+    def start_server(self, bootstrap_nodes):
         handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s'
+                                      '- %(message)s')
         handler.setFormatter(formatter)
-        
+
         # DEBUG
         if DEBUG:
             log = logging.getLogger('kademlia')
@@ -46,13 +48,13 @@ class KademliaServer:
                 "ip": self.ip,
                 "port": self.port
             }
-            value = json.dumps(value)
-            await self.server.set(username, value)
+            value_to_set = json.dumps(value)
+            await self.server.set(username, value_to_set)
             return value
 
         else:
             raise Exception("Username already exists")
-    
+
     async def login(self, username):
         result = await self.server.get(username)
         result = json.loads(result)
@@ -64,44 +66,42 @@ class KademliaServer:
                 "ip": self.ip,
                 "port": self.port
             }
-            value = json.dumps(value)
-            await self.server.set(username, value)
+            value_to_set = json.dumps(value)
+            await self.server.set(username, value_to_set)
             return value
 
         else:
             raise Exception("User doesn't exist! Please register")
-    
+
     async def get_user_ip(self, username):
         result = await self.server.get(username)
         result = json.loads(result)
-        
+
         if result is None:
             raise Exception("User doesn't exist!")
         else:
             return (result["ip"], result["port"])
 
-    async def get_user_followers(self, username):
+    async def get_user_followers(self, state):
         followers = {}
-        result = await self.server.get(username)
-        result = json.loads(result)
-        for follower in result["followers"]:
+
+        for follower in state["followers"]:
             result = await self.server.get(follower)
             result = json.loads(result)
             if result is not None:
                 followers[follower] = (result["ip"], result["port"])
-        
+
         return followers
 
-    async def get_user_following(self, username):
+    async def get_user_following(self, state):
         following = {}
-        result = await self.server.get(username)
-        result = json.loads(result)
-        for follw in result["following"]:
+
+        for follw in state["following"]:
             result = await self.server.get(follw)
             result = json.loads(result)
             if result is not None:
                 following[follw] = (result["ip"], result["port"])
-        
+
         return following
 
     async def get_user(self, username):
@@ -111,4 +111,3 @@ class KademliaServer:
 
     async def set_user(self, username, value):
         await self.server.set(username, value)
-

@@ -10,15 +10,18 @@ from kademlia.network import Server
 KS = None
 LOOP = None
 USERNAME = None
+STATE = None
 LIST_LOOP = None
 TIMELINE = None
 NODE = None
 
 async def node_server(reader, writer):
-    global LIST_LOOP, TIMELINE, KS
+    global LIST_LOOP, TIMELINE, KS, STATE
 
     while True:
         data = (await reader.readline()).strip()
+
+        print(data)
 
         if not data:
             break
@@ -28,14 +31,12 @@ async def node_server(reader, writer):
 
         if "follow" in data:
             new_follower = data["follow"]["username"]
-            future = asyncio.run_coroutine_threadsafe(KS.get_user(USERNAME),
-                                                      LOOP)
-            info = future.result()
-            if new_follower in info['followers']:
+
+            if new_follower in STATE['followers']:
                 writer.write(b'0\n')
             else:
-                info["followers"].append(new_follower)
-                value = json.dumps(info)
+                STATE["followers"].append(new_follower)
+                value = json.dumps(STATE)
                 future = asyncio.run_coroutine_threadsafe(
                                  KS.set_user(USERNAME, value),
                                  LOOP)
@@ -78,13 +79,13 @@ class Listener(Thread):
 
 class Node:
     def __init__(self, address, port, username, ks, state):
-        global KS, LOOP, USERNAME, TIMELINE, NODE
+        global KS, LOOP, USERNAME, TIMELINE, NODE, STATE
 
         TIMELINE = Timeline(username)
         USERNAME = username
         self.address = address
         self.port = port
-        self.state = state
+        STATE = state
         self.id_generator = flake.generator(self.port)
         KS = ks
         LOOP = asyncio.get_event_loop()
@@ -99,7 +100,14 @@ class Node:
         self.listener.start()
 
     def get_username(self):
+        global USERNAME
+
         return USERNAME
+
+    def get_state(self):
+        global STATE
+
+        return STATE
 
     async def post_message(self, message, followers):
         global USERNAME, TIMELINE
@@ -119,17 +127,19 @@ class Node:
                 "time": time.strftime('%Y-%m-%d %H:%M:%S')
             }
         }
+
         json_string = json.dumps(data) + '\n'
 
         for follower in followers.keys():
             try:
-                if (follower not in self.followers_cons):
-                    (reader, writer) = await asyncio.open_connection(
-                                       followers.get(follower)[0],
-                                       followers.get(follower)[1],
-                                       loop=asyncio.get_event_loop())
-                    self.followers_cons[follower] = (reader, writer)
+                try:
+                    if follower not in self.followers_cons:
+                        (reader, writer) = await asyncio.open_connection(
+                                        followers.get(follower)[0],
+                                        followers.get(follower)[1],
+                                        loop=asyncio.get_event_loop())
 
+                    self.followers_cons[follower] = (reader, writer)
                     writer.write(json_string.encode())
                 except ConnectionRefusedError:
                     pass
@@ -137,24 +147,22 @@ class Node:
                     # não conseguimos fazer write porque o utilizador se
                     # desconectou e a conexão guardada já n serve
                     (reader, writer) = await asyncio.open_connection(
-                                       followers.get(follower)[0],
-                                       followers.get(follower)[1],
-                                       loop=asyncio.get_event_loop())
+                                    followers.get(follower)[0],
+                                    followers.get(follower)[1],
+                                    loop=asyncio.get_event_loop())
                     self.followers_cons[follower] = (reader, writer)
                     writer.write(json_string.encode())
-                except Exception:
-                    pass
+            except Exception:
+                pass
 
     def show_timeline(self):
         global TIMELINE
         print(TIMELINE)
 
     async def follow_user(self, to_follow, loop):
-        global USERNAME
+        global USERNAME, STATE
 
-        my_info = await KS.get_user(USERNAME)
-
-        if to_follow in my_info["following"]:
+        if to_follow in STATE["following"]:
             print("You already follow that user!!")
 
         (ip, port) = await KS.get_user_ip(to_follow)
@@ -187,8 +195,8 @@ class Node:
         if data.decode() == '1':
             print("You followed %s successfully" % to_follow)
 
-            my_info["following"].append(to_follow)
-            value = json.dumps(my_info)
+            STATE["following"].append(to_follow)
+            value = json.dumps(STATE)
 
             await KS.set_user(USERNAME, value)
         else:

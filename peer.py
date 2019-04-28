@@ -28,12 +28,13 @@ async def post_message():
     message = await PROMPT("Enter Message: \n")
 
     try:
-        followers = await KS.get_user_followers(NODE.get_username())
+        followers = await KS.get_user_followers(NODE.get_state())
+        print(followers)
     except Exception as e:
         print(e)
 
     await NODE.post_message(message, followers)
-    
+
 
 async def follow_user():
     global LOOP, KS, NODE, PROMPT
@@ -61,9 +62,8 @@ async def login():
         state = await KS.login(username)
         NODE = Node(address, port, username, KS, state)
         print("Login com sucesso!")
-        
-        return 1
 
+        return 1
     except Exception as e:
         print(e)
         return 0
@@ -77,12 +77,12 @@ async def register(address, port):
         state = await KS.register(username)
         NODE = Node(address, port, username, KS, state)
         print("Registado com sucesso!")
+
         return 1
-        
     except Exception as e:
         print(e)
-        
         return 0
+
 
 def build_main_menu():
     menu = Menu("Main Menu")
@@ -92,6 +92,7 @@ def build_main_menu():
     menu.append_item(MenuItem("Post a message", post_message))
     return menu
 
+
 def build_auth_menu(address, port):
     menu = Menu("Authentication")
     menu.append_item(MenuItem("Login", login))
@@ -99,12 +100,14 @@ def build_auth_menu(address, port):
 
     return menu
 
+
 def run_main_menu():
     global MAIN_MENU
     MAIN_MENU = build_main_menu()
     while True:
         MAIN_MENU.execute()
         input("press enter to continue...")
+
 
 def run_auth_menu():
     global AUTH_MENU
@@ -115,10 +118,12 @@ def run_auth_menu():
         if auth_successful == 1:
             run_main_menu()
 
+
 def main(address, port):
     global KS, LOOP, PROMPT
-    
-    bt_addresses_p = [address_port.split(":") for address_port in settings.BOOTSTRAP_NODES.split(",")]
+
+    bt_addresses_p = [address_port.split(":")
+                      for address_port in settings.BOOTSTRAP_NODES.split(",")]
     bt_addresses = [(x, int(y)) for [x, y] in bt_addresses_p]
     KS = KademliaServer(address, port)
     LOOP = KS.start_server(bt_addresses)
@@ -126,22 +131,24 @@ def main(address, port):
     PROMPT = Prompt(LOOP)
 
     Thread(target=LOOP.run_forever, daemon=True).start()
-    
+
     run_auth_menu()
 
 if __name__ == "__main__":
 
     ap = argparse.ArgumentParser()
-    ap.add_argument('-a', '--address', type=str, help="Listen IP Address", default="localhost", required=True)
-    ap.add_argument('-p', '--port', type=int, help="Listen port", default=2222, required=True)
+    ap.add_argument('-a', '--address', type=str, help="Listen IP Address",
+                    default="localhost", required=True)
+    ap.add_argument('-p', '--port', type=int, help="Listen port", default=2222,
+                    required=True)
     args = vars(ap.parse_args())
 
     address = args.get("address")
     port = args.get("port")
 
     if not re.match(r'^(\d{1,3})(\.\d{1,3}){3}$', address) \
-        and address != "localhost" :
+       and address != "localhost":
         sys.stderr.write('Address format is not valid.')
         sys.exit()
-        
+
     main(address, port)
