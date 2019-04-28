@@ -10,23 +10,25 @@ DISCARD_BASELINE = settings.DISCARD_BASELINE
 
 
 class TimelineEntry:
-    def __init__(self, username, content, msg_id, time):
+    def __init__(self, username, content, msg_id, msg_nr, time):
         self.username = username
         self.content = content
         self.id = msg_id
+        self.msg_nr = msg_nr
         self.time = time
         self.seen = False
 
-    def __repr__(self):
-        time = self.time.strftime('%Y-%m-%d %H:%M:%S')
-        return "{ \"time\":" + time + ", \"name\":" + self.username + \
-               ", \"message\":" + self.content + "\"id\":" + self.id + "}"
+    # def __repr__(self):
+    #     time = self.time.strftime('%Y-%m-%d %H:%M:%S')
+    #     return "{ \"time\":" + time + ", \"name\":" + self.username + \
+    #            ", \"message\":" + self.content + "\"id\":" + self.id + "}"
 
     def get_dict(self):
         return {
             "name": self.username,
             "message": self.content,
             "id": self.id,
+            "msg_nr": self.msg_nr,
             "time": self.time,
             "seen": self.seen
         }
@@ -57,7 +59,7 @@ class Timeline:
             time = msg.get("time").strftime('%Y-%m-%d %H:%M:%S')
 
             result += "-" * 79 + "\n"
-            result += time + " - "
+            result += time + "(" + str(msg.get("msg_nr")) + ")" + " - "
             result += msg.get("name") + ": " + msg.get("message")
             result += "\n"
 
@@ -98,9 +100,9 @@ class Timeline:
 
         self.save_messages()
 
-    def add_message(self, user, message, msg_id, time):
+    def add_message(self, user, message, msg_id, msg_nr, time):
 
-        timeline_entry = TimelineEntry(user, message, msg_id, time)
+        timeline_entry = TimelineEntry(user, message, msg_id, msg_nr, time)
 
         user_msgs = self.messages.get(user, [])
         user_msgs.append(timeline_entry.get_dict())

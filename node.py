@@ -44,8 +44,16 @@ async def node_server(reader, writer):
             sender = data["post"]["username"]
             message = data["post"]["message"]
             msg_id = data["post"]["id"]
+            msg_nr = data["post"]["msg_nr"]
             time = flake.get_datetime_from_id(data["post"]["id"])
-            TIMELINE.add_message(sender, message, msg_id, time)
+            TIMELINE.add_message(sender, message, msg_id, msg_nr, time)
+
+            STATE["following"][sender] = (msg_nr, msg_id)
+            value = json.dumps(STATE)
+            future = asyncio.run_coroutine_threadsafe(
+                                KS.set_user(USERNAME, value),
+                                LOOP)
+            future.result()
 
         elif 'online' in data:
             username = data['online']['username']
@@ -108,21 +116,25 @@ class Node:
         return STATE
 
     async def post_message(self, message, followers):
-        global USERNAME, TIMELINE
+        global USERNAME, TIMELINE, STATE
 
         msg_id = self.id_generator.__next__()
         time = flake.get_datetime_from_id(msg_id)
 
         # add to timeline
-        TIMELINE.add_message(USERNAME, message, msg_id, time)
+        TIMELINE.add_message(USERNAME, message, msg_id, STATE['msg_nr'], time)
 
         data = {
             "post": {
                 "username": USERNAME,
                 "message": message,
+                "msg_nr": STATE['msg_nr'],
                 "id": msg_id
             }
         }
+
+        # incrementar contagem das mensagens
+        STATE['msg_nr'] += 1
 
         json_string = json.dumps(data) + '\n'
 
@@ -162,15 +174,16 @@ class Node:
     async def follow_user(self, to_follow, loop):
         global USERNAME, STATE
 
+        print(0)
         if to_follow in STATE["following"]:
             print("You already follow that user!!")
-
+        print(1)
         (ip, port) = await KS.get_user_ip(to_follow)
-
+        print(2)
         if to_follow == USERNAME:
             print("You can't follow yourself!")
             return
-
+        print(3)
         try:
             (reader, writer) = await asyncio.open_connection(
                                ip, port, loop=loop)
@@ -178,27 +191,28 @@ class Node:
             print("It's not possible to follow that user right now!"
                   "(user offline)")
             return
-
+        print(4)
         data = {
             "follow": {
                 "username": USERNAME
             }
         }
-
+        print(5)
         json_string = json.dumps(data) + '\n'
         writer.write(json_string.encode())
-
+        print(6)
         data = (await reader.readline()).strip()
-
+        print(7)
         writer.close()
 
         if data.decode() == '1':
             print("You followed %s successfully" % to_follow)
-
+            print(8)
             STATE["following"][to_follow] = (None, self.id_generator.__next__())
             value = json.dumps(STATE)
-
+            print(9)
             await KS.set_user(USERNAME, value)
+            print(10)
         else:
             print("It's not possible to follow %s (already followed)"
                   % to_follow)
