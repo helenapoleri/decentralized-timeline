@@ -44,7 +44,7 @@ class Timeline:
         # messages = [msg for msgs in self.messages.values() for msg in msgs]
         messages = []
         for msgs in self.messages.values():
-            for msg in msgs:
+            for msg in msgs.values():
                 msg['seen'] = True
                 messages.append(msg)
 
@@ -65,17 +65,18 @@ class Timeline:
         return self.username + "'s TIMELINE" + "\n" + result
 
     def get_user_messages(self, user, msgs_idx):
-        # TODO meter as self.messages como um dicionario
+
         msgs = []
         for msg_idx in msgs_idx:
-            for msg in self.messages[user]:
-                if msg['msg_nr'] == msg_idx:
-                    msgs.append({
-                        "name": msg['name'],
-                        "message": msg['message'],
-                        "id": msg['id'],
-                        "msg_nr": msg['msg_nr']
-                    })
+            if msg_idx in self.messages[user]:
+                msg = self.messages[user][msg_idx]
+                msgs.append({
+                    "name": msg['name'],
+                    "message": msg['message'],
+                    "id": msg['id'],
+                    "msg_nr": msg['msg_nr']
+                })
+
         return msgs
 
 
@@ -88,9 +89,9 @@ class Timeline:
             if user == self.username:
                 continue
 
-            for msg in msgs:
+            for msg_nr, msg in msgs.items():
                 if msg['time'] < discard_time and msg['seen']:
-                    msgs.remove(msg)
+                    msgs.pop(msg_nr)
                 else:
                     break
 
@@ -106,13 +107,13 @@ class Timeline:
         timeline_entry = TimelineEntry(user, message, msg_id, msg_nr, time)
 
         if  (user_knowledge == None) or (msg_nr == user_knowledge + 1):
-            user_msgs = self.messages.get(user, [])
-            user_msgs.append(timeline_entry.get_dict())
+            user_msgs = self.messages.get(user, {})
+            user_msgs[msg_nr] = (timeline_entry.get_dict())
             user_knowledge = msg_nr
 
             while(user_knowledge in self.waiting_messages):
                 msg = self.waiting_messages.pop(user_knowledge)
-                user_msgs.append(msg)
+                user_msgs[user_knowledge] = msg
                 user_knowledge += 1
 
             self.messages[user] = user_msgs
@@ -134,7 +135,7 @@ class Timeline:
             with open(filename, 'r') as infile:
                 data = json.load(infile)
                 for msgs in data.values():
-                    for msg in msgs:
+                    for msg in msgs.values():
                         msg['time'] = datetime.strptime(
                                                msg['time'],
                                                '%Y-%m-%d %H:%M:%S')
@@ -163,12 +164,12 @@ class Timeline:
 
     def save_current_messages(self):
         messages = {}
-        for user, msgs in self.messages.items():
-            user_msgs = []
-            for msg in msgs:
+        for user, msgs in self.waiting_messages.items():
+            user_msgs = {}
+            for msg_nr, msg in msgs.items():
                 new_msg = dict(msg)
                 new_msg['time'] = new_msg['time'].strftime('%Y-%m-%d %H:%M:%S')
-                user_msgs.append(new_msg)
+                user_msgs[msg_nr] = new_msg
             messages[user] = user_msgs
 
         if not os.path.isdir('messages'):
