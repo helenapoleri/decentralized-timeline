@@ -1,7 +1,6 @@
 import json
 import os
 import configparser
-import utils.snowflake as snowflake
 import settings
 from datetime import datetime, timedelta
 

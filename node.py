@@ -1,6 +1,6 @@
 import asyncio
 import json
-import utils.snowflake as snowflake
+import utils.flake as flake
 from datetime import datetime
 
 from threading import Thread
@@ -114,7 +114,7 @@ class Node:
         USERNAME = username
         self.address = address
         self.port = port
-        self.id_generator = snowflake.generator(1,1)
+        self.id_generator = flake.generator(self.port)
         SERVER = server
         self.connections = {} # ainda n sei bem como é que vai ser
         self.listener = Listener(self.address, self.port, self.connections)
@@ -127,16 +127,13 @@ class Node:
         global USERNAME, TIMELINE
         
         msg_id = self.id_generator.__next__()
-        time = snowflake.snowflake_to_datetime(msg_id)
+        time = datetime.strptime(flake.get_time_from_id(msg_id), "%a %b %d %H:%M:%S %Y")
 
         # add to timeline
         TIMELINE.add_message(USERNAME, message, msg_id, time)
         # increment vetor clock
         # create message
         # send message
-        print("ola")
-        print(followers)
-        print(followers.values())
         for follower in followers.keys():
             if follower not in self.connections:
                 print(followers.get(follower))
