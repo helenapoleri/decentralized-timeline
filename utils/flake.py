@@ -1,5 +1,7 @@
 
 import ntplib
+import time
+import os 
 
 from time import ctime, time
 from socket import inet_aton, error
@@ -30,18 +32,26 @@ def get_timestamp_from_id(id):
     return timestamp
 
 
-def id_builder(timestamp, port, seq_number):
+def id_builder(timestamp, address, seq_number):
     timestamp_binary = "{0:048b}".format(timestamp)
-    port_binary = "{0:032b}".format(port)
+    address_binary = "".join(["{0:08b}".format(int(x))
+                             for x in address.split(".")])
     seq_number_binary = "{0:016b}".format(seq_number)
 
-    return int(timestamp_binary + port_binary + seq_number_binary, 2)
+    return int(timestamp_binary + address_binary + seq_number_binary, 2)
+
+
+def adjust_system_clock():
+    c = ntplib.NTPClient()
+    try:
+        response = c.request('pool.ntp.org', version=3)
+        os.system('date ' + time.strftime('%m%d%H%M%Y.%S', time.localtime(response.tx_time)))
+    except:
+        pass
 
 
 def timestamp_now():
-    c = ntplib.NTPClient()
-    response = c.request('pool.ntp.org', version=3)
-    return int(response.tx_time * 1000)
+    return int(time.time() * 1000)
 
 
 def is_port_valid(port):
@@ -55,13 +65,16 @@ def generator(port):
     last_timestamp = 0
 
     while True:
+        adjust_system_clock()
         timestamp = timestamp_now()
 
         if last_timestamp == timestamp:
             seq_number += 1
+        elif last_timestamp > timestamp:
+            time.sleep(last_timestamp - timestamp)
         else:
             seq_number = 0
 
         last_timestamp = timestamp
 
-        yield id_builder(timestamp - epoch, port, seq_number)
+        yield id_builder(timestamp - epoch, address, seq_number)
