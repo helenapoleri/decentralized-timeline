@@ -1,6 +1,5 @@
 
 import ntplib
-import time
 import os 
 
 from time import ctime, time
@@ -32,13 +31,12 @@ def get_timestamp_from_id(id):
     return timestamp
 
 
-def id_builder(timestamp, address, seq_number):
+def id_builder(timestamp, port, seq_number):
     timestamp_binary = "{0:048b}".format(timestamp)
-    address_binary = "".join(["{0:08b}".format(int(x))
-                             for x in address.split(".")])
+    port_binary = "{0:032b}".format(port)
     seq_number_binary = "{0:016b}".format(seq_number)
 
-    return int(timestamp_binary + address_binary + seq_number_binary, 2)
+    return int(timestamp_binary + port_binary + seq_number_binary, 2)
 
 
 def adjust_system_clock():
@@ -51,7 +49,7 @@ def adjust_system_clock():
 
 
 def timestamp_now():
-    return int(time.time() * 1000)
+    return int(time() * 1000)
 
 
 def is_port_valid(port):
@@ -77,4 +75,4 @@ def generator(port):
 
         last_timestamp = timestamp
 
-        yield id_builder(timestamp - epoch, address, seq_number)
+        yield id_builder(timestamp - epoch, port, seq_number)

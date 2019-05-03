@@ -1,6 +1,7 @@
 import json
 import os
 import configparser
+import threading
 import settings
 import utils.flake as flake
 
@@ -37,6 +38,7 @@ class TimelineEntry:
 class Timeline:
     def __init__(self, username):
         self.username = username
+        self.lock = threading.RLock()
         self.get_timeline()
 
     def __repr__(self):
@@ -85,15 +87,17 @@ class Timeline:
 
         discard_time = flake.get_datetime_now() - max_duration
 
+        self.lock.acquire()
         for user, msgs in self.messages.items():
             if user == self.username:
                 continue
-
+            
             for msg_nr, msg in msgs.items():
                 if msg['time'] < discard_time and msg['seen']:
                     msgs.pop(msg_nr)
                 else:
                     break
+        self.lock.release()
 
 
     def user_waiting_messages(self, follw):
@@ -106,6 +110,7 @@ class Timeline:
 
         timeline_entry = TimelineEntry(user, message, msg_id, msg_nr, time)
 
+        self.lock.acquire()
         if  (user_knowledge == None) or (msg_nr == user_knowledge + 1):
             user_msgs = self.messages.get(user, {})
             user_msgs[msg_nr] = (timeline_entry.get_dict())
@@ -124,6 +129,7 @@ class Timeline:
             self.waiting_messages[user] = user_msgs
         else:
             pass
+        self.lock.release()
 
         self.discard_messages()
         self.save_messages()
@@ -153,7 +159,6 @@ class Timeline:
                         msg['time'] = datetime.strptime(
                                                msg['time'],
                                                '%Y-%m-%d %H:%M:%S')
-
                 self.waiting_messages = data
         except:
             self.waiting_messages = {}
@@ -164,6 +169,7 @@ class Timeline:
 
     def save_current_messages(self):
         messages = {}
+        self.lock.acquire()
         for user, msgs in self.waiting_messages.items():
             user_msgs = {}
             for msg_nr, msg in msgs.items():
@@ -171,7 +177,7 @@ class Timeline:
                 new_msg['time'] = new_msg['time'].strftime('%Y-%m-%d %H:%M:%S')
                 user_msgs[msg_nr] = new_msg
             messages[user] = user_msgs
-
+        self.lock.release()
         if not os.path.isdir('messages'):
             os.mkdir('messages')
 
@@ -182,6 +188,7 @@ class Timeline:
 
     def save_waiting_messages(self):
         messages = {}
+        self.lock.acquire()
         for user, msgs in self.waiting_messages.items():
             user_msgs = {}
             for msg_nr, msg in msgs.items():
@@ -189,6 +196,7 @@ class Timeline:
                 new_msg['time'] = new_msg['time'].strftime('%Y-%m-%d %H:%M:%S')
                 user_msgs[msg_nr] = new_msg
             messages[user] = user_msgs
+        self.lock.release()
 
         if not os.path.isdir('messages'):
             os.mkdir('messages')

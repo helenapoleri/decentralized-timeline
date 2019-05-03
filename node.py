@@ -80,6 +80,8 @@ async def node_server(reader, writer):
                 future.result()
                 writer.write(b'1\n')
         elif 'post' in data:
+            print("OLA8")
+            print(data)
             sender = data["post"]["username"]
             message = data["post"]["message"]
             msg_id = data["post"]["id"]
@@ -231,34 +233,42 @@ class Node:
 
         json_string = json.dumps(data) + '\n'
 
+        print(list(followers.keys()))
+
         for follower in followers.keys():
+            print("OLA1")
+            print(follower)
             try:
                 try:
                     if follower not in FOLLOWERS_CONS:
-                        (reader, writer) = await asyncio.open_connection(
+                        print("OLA2")
+                        FOLLOWERS_CONS[follower] = await asyncio.open_connection(
                                         followers.get(follower)[0],
                                         followers.get(follower)[1],
                                         loop=asyncio.get_event_loop())
-
-                    FOLLOWERS_CONS[follower] = (reader, writer)
-                    writer.write(json_string.encode())
+                        print("OLA11")
+                    
+                    FOLLOWERS_CONS[follower][1].write(json_string.encode())
                 except ConnectionRefusedError:
+                    print("OLA4")
                     pass
                 except UnboundLocalError:
                     # não conseguimos fazer write porque o utilizador se
                     # desconectou e a conexão guardada já n serve
-                    (reader, writer) = await asyncio.open_connection(
+                    FOLLOWERS_CONS[follower] = await asyncio.open_connection(
                                     followers.get(follower)[0],
                                     followers.get(follower)[1],
                                     loop=asyncio.get_event_loop())
-                    FOLLOWERS_CONS[follower] = (reader, writer)
-                    writer.write(json_string.encode())
+                    print("OLA5")
+                    FOLLOWERS_CONS[follower][1].write(json_string.encode())
             except Exception:
+                print("OLA9")
                 pass
 
         # incrementar contagem das mensagens
         STATE['msg_nr'] += 1
         value = json.dumps(STATE)
+        print("OLA6")
         await KS.set_user(USERNAME, value)
 
     async def update_timeline_messages(self):
