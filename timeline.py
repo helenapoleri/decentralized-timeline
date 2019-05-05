@@ -88,15 +88,22 @@ class Timeline:
         discard_time = flake.get_datetime_now() - max_duration
 
         self.lock.acquire()
+
+        messages = dict(self.messages)
         for user, msgs in self.messages.items():
             if user == self.username:
                 continue
             
+            user_msgs = dict(msgs)
+
             for msg_nr, msg in msgs.items():
                 if msg['time'] < discard_time and msg['seen']:
-                    msgs.pop(msg_nr)
+                    user_msgs.pop(msg_nr)
                 else:
                     break
+                
+            messages[user] = user_msgs
+        self.messages = messages
         self.lock.release()
 
 
@@ -111,6 +118,7 @@ class Timeline:
         timeline_entry = TimelineEntry(user, message, msg_id, msg_nr, time)
 
         self.lock.acquire()
+
         if  (user_knowledge == None) or (msg_nr == user_knowledge + 1):
             user_msgs = self.messages.get(user, {})
             user_msgs[msg_nr] = (timeline_entry.get_dict())

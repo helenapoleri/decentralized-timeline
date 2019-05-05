@@ -39,6 +39,9 @@ class KademliaServer:
 
         return self.loop
 
+    def close_server(self):
+        self.server.stop()
+
     async def register(self, username):
         result = await self.server.get(username)
         if result is None:
@@ -86,6 +89,19 @@ class KademliaServer:
         else:
             return (result["ip"], result["port"])
 
+    async def get_location_and_followers(self, usernames):
+        res = {}
+        for username in usernames:
+            result = await self.server.get(username)
+            result = json.loads(result)
+
+            if result is not None:
+                res[username] = (result["ip"],
+                                 result["port"],
+                                 result["followers"])
+
+        return res
+
     async def get_user_followers(self, username):
         followers = {}
 
@@ -94,6 +110,7 @@ class KademliaServer:
         for follower in result["followers"]:
             result = await self.server.get(follower)
             result = json.loads(result)
+
             if result is not None:
                 followers[follower] = (result["ip"],
                                        result["port"],

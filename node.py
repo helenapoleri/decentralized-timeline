@@ -2,12 +2,15 @@ import asyncio
 import json
 import utils.flake as flake
 from datetime import datetime
+import settings
 
 from numpy.random import choice
 from threading import Thread
 from timeline import Timeline
 from kademlia.network import Server
 
+HIERARCHY_BASELINE = settings.HIERARCHY_BASELINE
+REDIRECT_USERS = settings.REDIRECT_USERS
 KS = None
 LOOP = None
 USERNAME = None
@@ -17,6 +20,48 @@ TIMELINE = None
 NODE = None
 FOLLOWERS_CONS = None
 REDIRECT_CONS = None
+
+async def send_message_to_user(user, ip, port, message, established_connections):
+    res = True
+    try:
+        try:
+            if user not in established_connections:
+                established_connections[user] = await asyncio.open_connection(
+                                ip,
+                                port,
+                                loop=asyncio.get_event_loop())
+            
+            established_connections[user][1].write(message.encode())
+        except ConnectionRefusedError:
+            res = False
+        except UnboundLocalError:
+            # não conseguimos fazer write porque o utilizador se
+            # desconectou e a conexão guardada já n serve
+            established_connections[user] = await asyncio.open_connection(
+                            ip,
+                            port,
+                            loop=asyncio.get_event_loop())
+            established_connections[user][1].write(message.encode())
+    except Exception:
+        res = False
+    
+    return res
+
+async def send_message_to_users(users, message, established_connections):
+    usernames = list(users.keys())
+    tasks = [send_message_to_user(user, users[user][0], users[user][1], message, established_connections) 
+                                            for user in usernames]
+    finished = await asyncio.gather(*tasks)
+
+    true_users = []
+    false_users = []
+    for i in range(len(finished)):
+        if finished[i] == True:
+            true_users.append(usernames[i])
+        else:
+            false_users.append(usernames[i])
+    return true_users, false_users
+
 
 async def node_server(reader, writer):
     global LIST_LOOP, TIMELINE, KS, STATE, FOLLOWERS_CONS, LOOP
@@ -35,25 +80,12 @@ async def node_server(reader, writer):
 
             if new_follower in STATE['followers']:
                 writer.write(b'0\n')
-            elif len(STATE['followers']) > 2:
-                followers = await KS.get_user_followers(USERNAME)
-                usernames = list(followers.keys())
-                weights = [len(z) for (y, w, z) in followers.values()]
-                # Invert weights -> less probable if less followers
-                weights = [1.0 / (w+.001) for w in weights]
-                sum_weights = sum(weights)
-                # Normalization
-                weights = [w / sum_weights for w in weights]
-
-                draw_followers = choice(usernames, 1, p=weights)
-                draw_cons = []
-
-                for flw in draw_followers:
-                    (r, w) = await asyncio.open_connection(
-                        followers.get(flw)[0],
-                        followers.get(flw)[1],
-                        loop=asyncio.get_event_loop())
-                    draw_cons.append((r, w))
+            elif len(STATE['followers']) > HIERARCHY_BASELINE:
+                
+                future = asyncio.run_coroutine_threadsafe(
+                                 KS.get_location_and_followers(STATE['followers']),
+                                 LOOP)
+                followers = future.result()
 
                 data = {
                     "redirect": {
@@ -64,24 +96,41 @@ async def node_server(reader, writer):
 
                 json_string = json.dumps(data) + '\n'
 
-                for (r, w) in draw_cons:
-                    w.write(json_string.encode())
+                users = dict(followers)
+                usernames = list(users.keys())
+                weights = [len(z) for (y, w, z) in users.values()]
+                weights = [1.0 / (w+.001) for w in weights]
+                sum_weights = sum(weights)
+                weights = [w / sum_weights for w in weights]
+                users_weights = {}
 
-                # TODO: Wait for responses, can they be negative? (ex: person
-                # can't redirect messages)
+                for username, weight in zip(usernames, weights):
+                    users_weights[username] = weight
+
+                redirectors = 0
+                while redirectors < REDIRECT_USERS:
+                    diff = REDIRECT_USERS - redirectors
+                    draw_followers = choice(list(users_weights.keys()), diff, p=list(users_weights.values()))
+                    draw_followers = { user: users[user][0:2] for user in draw_followers}
+
+                    draw_cons = {}
+
+                    success, insuccess = await send_message_to_users(draw_followers, json_string, draw_cons)
+                    redirectors += len(success)
+                    for user in [*success, *insuccess]:
+                        users_weights.pop(user)
 
                 writer.write(b'1\n')
             else:
                 STATE["followers"].append(new_follower)
                 value = json.dumps(STATE)
+
                 future = asyncio.run_coroutine_threadsafe(
                                  KS.set_user(USERNAME, value),
                                  LOOP)
                 future.result()
                 writer.write(b'1\n')
         elif 'post' in data:
-            print("OLA8")
-            print(data)
             sender = data["post"]["username"]
             message = data["post"]["message"]
             msg_id = data["post"]["id"]
@@ -98,31 +147,28 @@ async def node_server(reader, writer):
                                     KS.set_user(USERNAME, value),
                                     LOOP)
                 future.result()
-            else:
-                # TODO - questionar por mais informação
-                pass
+            elif msg_nr > user_knowledge + 1:
+                waiting_msgs = TIMELINE.user_waiting_messages(sender)
+                wanted_msgs = []
+
+                for msg_id in range(user_knowledge + 1, msg_nr):
+                    if msg_id not in waiting_msgs:
+                        wanted_msgs.append(msg_id)
+
+                    messages = await request_messages(sender, wanted_msgs, reader=reader, writer=writer)
+                    if messages != []:
+                        await handle_messages(messages)
 
             # Redirect messages if needed
+            json_string = json.dumps(data) + '\n'
             if sender in STATE["redirect"]:
-                for to_redirect in STATE["redirect"][sender]:
 
-                    if to_redirect not in REDIRECT_CONS:
-                        # GET HIS INFO (ADDRESS, PORT)
-                        future = asyncio.run_coroutine_threadsafe(
-                                KS.get_user(to_redirect),
-                                LOOP)
-                        result = future.result()
+                future = asyncio.run_coroutine_threadsafe(
+                                 KS.get_location_and_followers(STATE["redirect"][sender]),
+                                 LOOP)
+                redirects = future.result()
 
-                        # OPEN CONNECTION
-                        REDIRECT_CONS[to_redirect] = await \
-                            asyncio.open_connection(
-                                    result["ip"],
-                                    result["port"],
-                                    loop=asyncio.get_event_loop())
-
-                    (r, w) = REDIRECT_CONS[to_redirect]
-
-                    w.write((json.dumps(data) + '\n').encode())
+                await send_message_to_users(redirects,json_string, REDIRECT_CONS)
 
         elif 'online' in data:
             username = data['online']['username']
@@ -167,11 +213,16 @@ class Listener(Thread):
         self.address = address
         self.port = port
 
+
+    def close_listener(self):
+        self.server.close()
+
     async def start_listener(self):
-        server = await asyncio.start_server(node_server,
+        self.server = await asyncio.start_server(node_server,
                                             self.address,
                                             self.port)
-        await server.serve_forever()
+
+        await self.server.serve_forever()
 
     def run(self):
         global LIST_LOOP
@@ -201,7 +252,9 @@ class Node:
         # seria o ideal
         self.following_cons = {}
         self.listener = Listener(self.address, self.port)
+        self.listener.daemon = True
         self.listener.start()
+        
 
     def get_username(self):
         global USERNAME
@@ -233,64 +286,35 @@ class Node:
 
         json_string = json.dumps(data) + '\n'
 
-        print(list(followers.keys()))
-
-        for follower in followers.keys():
-            print("OLA1")
-            print(follower)
-            try:
-                try:
-                    if follower not in FOLLOWERS_CONS:
-                        print("OLA2")
-                        FOLLOWERS_CONS[follower] = await asyncio.open_connection(
-                                        followers.get(follower)[0],
-                                        followers.get(follower)[1],
-                                        loop=asyncio.get_event_loop())
-                        print("OLA11")
-                    
-                    FOLLOWERS_CONS[follower][1].write(json_string.encode())
-                except ConnectionRefusedError:
-                    print("OLA4")
-                    pass
-                except UnboundLocalError:
-                    # não conseguimos fazer write porque o utilizador se
-                    # desconectou e a conexão guardada já n serve
-                    FOLLOWERS_CONS[follower] = await asyncio.open_connection(
-                                    followers.get(follower)[0],
-                                    followers.get(follower)[1],
-                                    loop=asyncio.get_event_loop())
-                    print("OLA5")
-                    FOLLOWERS_CONS[follower][1].write(json_string.encode())
-            except Exception:
-                print("OLA9")
-                pass
+        print(followers)
+        await send_message_to_users(followers, json_string, FOLLOWERS_CONS)
 
         # incrementar contagem das mensagens
         STATE['msg_nr'] += 1
         value = json.dumps(STATE)
-        print("OLA6")
+
         await KS.set_user(USERNAME, value)
 
     async def update_timeline_messages(self):
+        
         outdated_follw = await KS.get_outdated_user_following(
                                   STATE["following"])
-
+        
         for (follw, ip, port, user_knowledge) in outdated_follw:
             current_knowledge = STATE["following"][follw][0]
-
+            
             waiting_msgs = TIMELINE.user_waiting_messages(follw)
             wanted_msgs = []
-
+            
             for msg_nr in range(current_knowledge + 1, user_knowledge + 1):
                 if msg_nr not in waiting_msgs:
                     wanted_msgs.append(msg_nr)
 
             try:
-                messages = await request_messages(follw, wanted_msgs, ip, port)
-                await handle_messages(messages)
-
+                messages = await request_messages(follw, wanted_msgs, ip=ip, port=port)
+                if messages != []:
+                    await handle_messages(messages)
             except ConnectionRefusedError:
-                print("burra")
                 user_followers = await KS.get_users_following_user(follw)
                 for user in user_followers:
                     current_knowledge = STATE["following"][follw][0]
@@ -298,8 +322,9 @@ class Node:
                         info = await KS.get_user(user)
                         if info['following'][follw][0] > current_knowledge:
                             try:
-                                messages = await request_messages(follw, wanted_msgs, info['ip'], info['port'])
-                                await handle_messages(messages)
+                                messages = await request_messages(follw, wanted_msgs, ip=info['ip'], port=info['port'])
+                                if messages != []:
+                                    await handle_messages(messages)
                                 for msg in messages:
                                     wanted_msgs.remove(msg['msg_nr'])
                                     
@@ -309,6 +334,9 @@ class Node:
                             continue
                     else:
                         break
+
+    def logout(self):
+        self.listener.close_listener()
 
 
     def show_timeline(self):
@@ -373,12 +401,24 @@ async def handle_messages(messages):
         time = flake.get_datetime_from_id(msg_id)
         TIMELINE.add_message(sender, message, msg_id, msg_nr, time)
 
+    # Redirect messages if needed
+    json_string = json.dumps(msg) + '\n'
+    if sender in STATE["redirect"]:
+
+        future = asyncio.run_coroutine_threadsafe(
+                            KS.get_location_and_followers(STATE["redirect"][sender]),
+                            LOOP)
+        redirects = future.result()
+
+        await send_message_to_users(redirects,json_string, REDIRECT_CONS)
+
     STATE["following"][sender] = (msg_nr, msg_id)
     value = json.dumps(STATE)
     await KS.set_user(USERNAME, value)
 
-async def request_messages(user, wanted_msgs, ip, port):
-    (reader, writer) = await asyncio.open_connection(ip, port, loop=LOOP)
+async def request_messages(user, wanted_msgs, ip=None, port=None, reader=None, writer=None):
+    if reader == None and writer == None:
+        (reader, writer) = await asyncio.open_connection(ip, port, loop=LOOP)
 
     data = {
         "msgs_request": {

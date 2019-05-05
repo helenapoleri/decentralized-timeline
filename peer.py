@@ -28,7 +28,10 @@ async def post_message():
     message = await PROMPT("Enter Message: \n")
 
     try:
-        followers = await KS.get_user_followers(NODE.get_username())
+        # followers = await KS.get_user_followers(NODE.get_username())
+        state = NODE.get_state()
+        followers = await KS.get_location_and_followers(state['followers'])
+
     except Exception as e:
         print(e)
 
@@ -58,15 +61,26 @@ async def login():
     username = await PROMPT("Username: ")
 
     try:
+        print(1)
         state = await KS.login(username)
+        print(2)
         NODE = Node(address, port, username, KS, state)
+        print(3)
         await NODE.update_timeline_messages()
+        print(4)
         print("Login com sucesso!")
 
         return 1
     except Exception as e:
         print(e)
         return 0
+
+async def logout():
+    global NODE, KS
+
+    NODE.logout()
+    KS.close_server()
+    return False
 
 async def register(address, port):
     global NODE, KS, PROMPT
@@ -90,6 +104,7 @@ def build_main_menu():
     menu.append_item(MenuItem("Show timeline", show_timeline))
     menu.append_item(MenuItem("Follow user", follow_user))
     menu.append_item(MenuItem("Post a message", post_message))
+    menu.append_item(MenuItem("Logout", logout))
     return menu
 
 
@@ -105,7 +120,9 @@ def run_main_menu():
     global MAIN_MENU
     MAIN_MENU = build_main_menu()
     while True:
-        MAIN_MENU.execute()
+        res = MAIN_MENU.execute()
+        if res == False:
+            break
         input("press enter to continue...")
 
 
@@ -117,6 +134,7 @@ def run_auth_menu():
         input("press enter to continue..")
         if auth_successful == 1:
             run_main_menu()
+            break
 
 
 def main(address, port):
