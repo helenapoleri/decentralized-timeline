@@ -121,7 +121,7 @@ def run_main_menu():
     MAIN_MENU = build_main_menu()
     while True:
         res = MAIN_MENU.execute()
-        if res == False:
+        if res is False:
             break
         input("press enter to continue...")
 

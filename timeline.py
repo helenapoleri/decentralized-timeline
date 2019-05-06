@@ -81,7 +81,6 @@ class Timeline:
 
         return msgs
 
-
     def discard_messages(self):
         max_duration = timedelta(seconds=DISCARD_BASELINE)
 
@@ -93,7 +92,7 @@ class Timeline:
         for user, msgs in self.messages.items():
             if user == self.username:
                 continue
-            
+
             user_msgs = dict(msgs)
 
             for msg_nr, msg in msgs.items():
@@ -101,11 +100,9 @@ class Timeline:
                     user_msgs.pop(msg_nr)
                 else:
                     break
-                
             messages[user] = user_msgs
         self.messages = messages
         self.lock.release()
-
 
     def user_waiting_messages(self, follw):
         if follw in self.waiting_messages:
@@ -113,13 +110,14 @@ class Timeline:
         else:
             return []
 
-    def add_message(self, user, message, msg_id, msg_nr, time, user_knowledge = None):
+    def add_message(self, user, message, msg_id, msg_nr, time,
+                    user_knowledge=None):
 
         timeline_entry = TimelineEntry(user, message, msg_id, msg_nr, time)
 
         self.lock.acquire()
 
-        if  (user_knowledge == None) or (msg_nr == user_knowledge + 1):
+        if (user_knowledge is None) or (msg_nr == user_knowledge + 1):
             user_msgs = self.messages.get(user, {})
             user_msgs[msg_nr] = (timeline_entry.get_dict())
             user_knowledge = msg_nr
@@ -141,7 +139,6 @@ class Timeline:
 
         self.discard_messages()
         self.save_messages()
-
 
     def get_timeline(self):
         try:

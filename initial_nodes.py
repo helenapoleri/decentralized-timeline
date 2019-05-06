@@ -34,12 +34,15 @@ class InitialNode(Thread):
         loop.close()
 
 config = configparser.ConfigParser()
-config.read(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'config/configuration.ini'))
+config.read(os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                         'config/configuration.ini'))
 
-ports = [int(address_port.split(":")[1]) for address_port in config.get("BOOTSTRAP", "INITIAL_NODES").split(",")]
+ports = [int(address_port.split(":")[1]) for address_port
+         in config.get("BOOTSTRAP", "INITIAL_NODES").split(",")]
 
 handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)' +
+                              ' - %(message)s')
 handler.setFormatter(formatter)
 log = logging.getLogger('kademlia')
 log.addHandler(handler)

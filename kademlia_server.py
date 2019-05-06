@@ -132,7 +132,8 @@ class KademliaServer:
             result = await self.server.get(follw)
             result = json.loads(result)
             if (result is not None) and result['msg_nr'] > user_knowledge:
-                res.append((follw, result["ip"], result["port"], result["msg_nr"]))
+                res.append((follw, result["ip"], result["port"],
+                            result["msg_nr"]))
 
         return res
 
