@@ -100,13 +100,13 @@ async def node_server(reader, writer):
 
                 users = dict(followers)
                 usernames = list(users.keys())
+
                 weights = [len(z) for (y, w, z) in users.values()]
                 weights = [1.0 / (w+.001) for w in weights]
                 sum_weights = sum(weights)
-                weights = [float(str(round(w / sum_weights, 4)))
-                           for w in weights]
+                weights = [float(str(round(w / sum_weights,4))) for w in weights]
                 weights[0] = float(str(round(1 - sum(weights[1:]), 4)))
-                print(weights)
+
                 users_weights = {}
 
                 for username, weight in zip(usernames, weights):
@@ -173,7 +173,7 @@ async def node_server(reader, writer):
                                                       reader=reader,
                                                       writer=writer)
                     if messages != []:
-                        await handle_messages(messages)
+                        await handle_messages(messages, thread_safe=True)
 
             # Redirect messages if needed
             json_string = json.dumps(data) + '\n'
@@ -184,7 +184,8 @@ async def node_server(reader, writer):
                     LOOP)
                 redirects = future.result()
 
-                await handle_messages(messages, thread_safe=True)
+                await send_message_to_users(redirects, json_string,
+                                            REDIRECT_CONS)
 
         elif 'online' in data:
             username = data['online']['username']
