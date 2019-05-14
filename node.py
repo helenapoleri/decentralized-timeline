@@ -5,7 +5,7 @@ import settings
 import random
 
 from datetime import datetime
-from numpy.random import choice
+from random import choices
 from threading import Thread
 from timeline import Timeline
 from kademlia.network import Server
@@ -104,7 +104,8 @@ async def node_server(reader, writer):
                 weights = [len(z) for (y, w, z) in users.values()]
                 weights = [1.0 / (w+.001) for w in weights]
                 sum_weights = sum(weights)
-                weights = [float(str(round(w / sum_weights,4))) for w in weights]
+                weights = [float(str(round(w / sum_weights, 4)))
+                           for w in weights]
                 weights[0] = float(str(round(1 - sum(weights[1:]), 4)))
 
                 users_weights = {}
@@ -113,12 +114,21 @@ async def node_server(reader, writer):
                     users_weights[username] = weight
 
                 redirectors = 0
+
                 while redirectors < REDIRECT_USERS:
                     diff = REDIRECT_USERS - redirectors
-                    draw_followers = choice(
-                        list(users_weights.keys()),
-                        diff,
-                        p=list(users_weights.values()))
+                    draw_followers = []
+                    num = 0
+                    save = dict(users_weights)
+                    while num < diff:
+                        user = choices(
+                            list(save.keys()),
+                            weights=list(save.values()))
+                        save.pop(user[0])
+                        draw_followers.append(user[0])
+
+                        num += 1
+
                     draw_followers = {user: users[user][0:2]
                                       for user in draw_followers}
 
