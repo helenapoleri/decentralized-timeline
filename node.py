@@ -1,9 +1,10 @@
 import asyncio
 import json
 import utils.flake as flake
-from datetime import datetime
 import settings
+import random
 
+from datetime import datetime
 from numpy.random import choice
 from threading import Thread
 from timeline import Timeline
@@ -28,17 +29,15 @@ async def send_message_to_user(user, ip, port, message,
         try:
             established_connections[user] = await asyncio.open_connection(
                 ip, port, loop=asyncio.get_event_loop())
-            
+
             established_connections[user][1].write(message.encode())
             await established_connections[user][1].drain()
         except ConnectionResetError:
-            # não conseguimos fazer write porque o utilizador se
-            # desconectou e a conexão guardada já n serve
             established_connections[user] = await asyncio.open_connection(
                             ip,
                             port,
                             loop=asyncio.get_event_loop())
-            
+
             established_connections[user][1].write(message.encode())
             await established_connections[user][1].drain()
         except Exception as e:
@@ -46,7 +45,7 @@ async def send_message_to_user(user, ip, port, message,
     except Exception as e:
         print(e)
         res = False
-    
+
     return res
 
 async def send_message_to_users(users, message, established_connections):
@@ -84,10 +83,10 @@ async def node_server(reader, writer):
                 writer.write(b'0\n')
                 await writer.drain()
             elif len(STATE['followers']) >= HIERARCHY_BASELINE:
-                
+
                 future = asyncio.run_coroutine_threadsafe(
-                                 KS.get_location_and_followers(STATE['followers']),
-                                 LOOP)
+                                 KS.get_location_and_followers(
+                                    STATE['followers']), LOOP)
                 followers = future.result()
 
                 data = {
@@ -104,7 +103,10 @@ async def node_server(reader, writer):
                 weights = [len(z) for (y, w, z) in users.values()]
                 weights = [1.0 / (w+.001) for w in weights]
                 sum_weights = sum(weights)
-                weights = [w / sum_weights for w in weights]
+                weights = [float(str(round(w / sum_weights, 4)))
+                           for w in weights]
+                weights[0] = float(str(round(1 - sum(weights[1:]), 4)))
+                print(weights)
                 users_weights = {}
 
                 for username, weight in zip(usernames, weights):
@@ -113,8 +115,10 @@ async def node_server(reader, writer):
                 redirectors = 0
                 while redirectors < REDIRECT_USERS:
                     diff = REDIRECT_USERS - redirectors
-                    draw_followers = choice(list(users_weights.keys()), diff,
-                                            p=list(users_weights.values()))
+                    draw_followers = choice(
+                        list(users_weights.keys()),
+                        diff,
+                        p=list(users_weights.values()))
                     draw_followers = {user: users[user][0:2]
                                       for user in draw_followers}
 
@@ -180,8 +184,7 @@ async def node_server(reader, writer):
                     LOOP)
                 redirects = future.result()
 
-                await send_message_to_users(redirects, json_string,
-                                            REDIRECT_CONS)
+                await handle_messages(messages, thread_safe=True)
 
         elif 'online' in data:
             username = data['online']['username']
@@ -210,7 +213,7 @@ async def node_server(reader, writer):
             data = {
                 "messages": messages
             }
- 
+
             json_string = json.dumps(data) + '\n'
             writer.write(json_string.encode())
             await writer.drain()
@@ -257,11 +260,7 @@ class Node:
         self.id_generator = flake.generator(self.port)
         FOLLOWERS_CONS = {}
         REDIRECT_CONS = {}
-        # não estou a inicialializar as conexões para os followers
-        # porque pensando num contexto real a maior parte das vezes
-        # um utilizador vai à aplicação e não quer enviar nenhuma
-        # mensagem, pelo que criar todas as conexões sempre não
-        # seria o ideal
+
         self.following_cons = {}
         self.listener = Listener(self.address, self.port)
         self.listener.daemon = True
@@ -280,10 +279,12 @@ class Node:
     async def post_message(self, message, followers):
         global USERNAME, TIMELINE, STATE, FOLLOWERS_CONS
 
+        STATE['msg_nr'] += 1
         msg_id = self.id_generator.__next__()
+
         time = flake.get_datetime_from_id(msg_id)
 
-        # add to timeline
+        # Add to timeline
         TIMELINE.add_message(USERNAME, message, msg_id, STATE['msg_nr'], time)
 
         data = {
@@ -299,23 +300,21 @@ class Node:
 
         await send_message_to_users(followers, json_string, FOLLOWERS_CONS)
 
-        # incrementar contagem das mensagens
-        STATE['msg_nr'] += 1
         value = json.dumps(STATE)
 
         await KS.set_user(USERNAME, value)
 
     async def update_timeline_messages(self):
-        
+
         outdated_follw = await KS.get_outdated_user_following(
                                   STATE["following"])
-        
+
         for (follw, ip, port, user_knowledge) in outdated_follw:
             current_knowledge = STATE["following"][follw][0]
-            
+
             waiting_msgs = TIMELINE.user_waiting_messages(follw)
             wanted_msgs = []
-            
+
             for msg_nr in range(current_knowledge + 1, user_knowledge + 1):
                 if msg_nr not in waiting_msgs:
                     wanted_msgs.append(msg_nr)
@@ -340,7 +339,7 @@ class Node:
                                     await handle_messages(messages)
                                 for msg in messages:
                                     wanted_msgs.remove(msg['msg_nr'])
-                                    
+
                             except ConnectionRefusedError:
                                 continue
                         else:
@@ -362,7 +361,7 @@ class Node:
         if to_follow in STATE["following"]:
             print("You already follow that user!!")
 
-        (ip, port) = await KS.get_user_ip(to_follow)
+        (ip, port, msg_nr) = await KS.get_user_ip_msgnr(to_follow)
 
         if to_follow == USERNAME:
             print("You can't follow yourself!")
@@ -393,7 +392,7 @@ class Node:
         if data.decode() == '1':
             print("You followed %s successfully" % to_follow)
 
-            STATE["following"][to_follow] = (None,
+            STATE["following"][to_follow] = (msg_nr,
                                              self.id_generator.__next__())
             value = json.dumps(STATE)
 
@@ -403,29 +402,37 @@ class Node:
             print("It's not possible to follow %s (already followed)"
                   % to_follow)
 
-
-async def handle_messages(messages):
+async def handle_messages(messages, thread_safe=False):
 
     for msg in messages:
-        sender = msg["name"]
+        sender = msg["username"]
         message = msg["message"]
         msg_id = msg["id"]
         msg_nr = msg["msg_nr"]
         time = flake.get_datetime_from_id(msg_id)
         TIMELINE.add_message(sender, message, msg_id, msg_nr, time)
 
-    # Redirect messages if needed
-    json_string = json.dumps(msg) + '\n'
-    if sender in STATE["redirect"]:
+        data = {
+            "post": msg
+        }
 
-        future = asyncio.run_coroutine_threadsafe(
-            KS.get_location_and_followers(STATE["redirect"][sender]),
-            LOOP)
-        redirects = future.result()
+        # Redirect messages if needed
+        json_string = json.dumps(data) + '\n'
+        if sender in STATE["redirect"]:
+            if(thread_safe):
+                future = asyncio.run_coroutine_threadsafe(
+                    KS.get_location_and_followers(STATE["redirect"][sender]),
+                    LOOP)
+                redirects = future.result()
+            else:
+                redirects = await KS.get_location_and_followers(
+                    STATE["redirect"][sender])
+            await send_message_to_users(redirects, json_string, REDIRECT_CONS)
 
-        await send_message_to_users(redirects, json_string, REDIRECT_CONS)
+        user_knowledge = STATE["following"][sender][0]
+        if user_knowledge is None or msg_nr == user_knowledge + 1:
+            STATE["following"][sender] = (msg_nr, msg_id)
 
-    STATE["following"][sender] = (msg_nr, msg_id)
     value = json.dumps(STATE)
     await KS.set_user(USERNAME, value)
 

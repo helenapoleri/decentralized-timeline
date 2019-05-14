@@ -33,8 +33,6 @@ class KademliaServer:
 
         self.server = Server()
         self.loop.run_until_complete(self.server.listen(self.port))
-
-        # bootstrap_node = (bt_Ip, int(bt_port))
         self.loop.run_until_complete(self.server.bootstrap(bootstrap_nodes))
 
         return self.loop
@@ -88,6 +86,15 @@ class KademliaServer:
             raise Exception("User doesn't exist!")
         else:
             return (result["ip"], result["port"])
+
+    async def get_user_ip_msgnr(self, username):
+        result = await self.server.get(username)
+        result = json.loads(result)
+
+        if result is None:
+            raise Exception("User doesn't exist!")
+        else:
+            return (result["ip"], result["port"], result["msg_nr"])
 
     async def get_location_and_followers(self, usernames):
         res = {}

@@ -3,17 +3,17 @@ import socket
 import configparser
 import os
 import argparse
-import regex as re
 import sys
 import asyncio
 import settings
-from utils.prompt import Prompt
+import regex as re
 
+from utils.prompt import Prompt
 from threading import Thread
 from kademlia_server import KademliaServer
 from node import Node
-from menu.menu import Menu
-from menu.menu_item import MenuItem
+from utils.menu.menu import Menu
+from utils.menu.menu_item import MenuItem
 
 LOOP = None
 NODE = None
@@ -28,10 +28,8 @@ async def post_message():
     message = await PROMPT("Enter Message: \n")
 
     try:
-        # followers = await KS.get_user_followers(NODE.get_username())
         state = NODE.get_state()
         followers = await KS.get_location_and_followers(state['followers'])
-
     except Exception as e:
         print(e)
 
@@ -61,13 +59,9 @@ async def login():
     username = await PROMPT("Username: ")
 
     try:
-        print(1)
         state = await KS.login(username)
-        print(2)
         NODE = Node(address, port, username, KS, state)
-        print(3)
         await NODE.update_timeline_messages()
-        print(4)
         print("Login com sucesso!")
 
         return 1
@@ -152,10 +146,11 @@ def main(address, port):
 
     run_auth_menu()
 
+
 if __name__ == "__main__":
 
     ap = argparse.ArgumentParser()
-    ap.add_argument('-a', '--address', type=str, help="Listen IP Address",
+    ap.add_argument('-a', '--address', type=str, help="Host IP Address",
                     default="localhost", required=True)
     ap.add_argument('-p', '--port', type=int, help="Listen port", default=2222,
                     required=True)

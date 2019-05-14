@@ -6,6 +6,7 @@ import configparser
 from kademlia.network import Server
 from threading import Thread
 
+
 class InitialNode(Thread):
     def __init__(self, port, bootstrap_address, bootstrap_port):
         Thread.__init__(self)
@@ -20,7 +21,7 @@ class InitialNode(Thread):
 
         server = Server()
         loop.run_until_complete(server.listen(self.port))
-       
+
         if self.bootstrap_port is not None:
             bootstrap_node = (self.bootstrap_address, self.bootstrap_port)
             loop.run_until_complete(server.bootstrap([bootstrap_node]))
@@ -41,7 +42,7 @@ ports = [int(address_port.split(":")[1]) for address_port
          in config.get("BOOTSTRAP", "INITIAL_NODES").split(",")]
 
 handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)' +
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s'
                               ' - %(message)s')
 handler.setFormatter(formatter)
 log = logging.getLogger('kademlia')

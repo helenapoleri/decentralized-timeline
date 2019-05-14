@@ -2,6 +2,7 @@ import sys
 import time
 import asyncio as aio
 
+
 class Prompt:
     def __init__(self, loop=None):
         self.loop = loop or aio.get_event_loop()

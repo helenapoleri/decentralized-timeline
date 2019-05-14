@@ -6,7 +6,7 @@ class Menu:
 
     def append_item(self, item):
         self.items.append(item)
-    
+
     def print_menu(self):
         nr = int((79 - len(self.name) - 2)/2)
         if (nr * 2 + len(self.name) + 2) != 79:
@@ -16,9 +16,10 @@ class Menu:
         option = 1
         for item in self.items:
             spaces = 79 - 6 - len(str(option)) - len(item.get_name())
-            print("| " + str(option) + ": " + item.get_name() + spaces * " " + " |")
+            print("| " + str(option) + ": " + item.get_name() +
+                  spaces * " " + " |")
             option += 1
-        
+
         print("=" * 79)
 
     def execute(self):
@@ -31,7 +32,6 @@ class Menu:
                 self.option = -1
                 return self.items[op - 1].run()
 
-
     def read_option(self):
         option = input("> ")
         try:
@@ -42,4 +42,4 @@ class Menu:
                 self.option = int(option)
         except ValueError:
             self.option = -1
-            print("Opção deve ser numérica!!")
+            print("Opção deve ser numérica!")

@@ -1,6 +1,5 @@
-
 import ntplib
-import os 
+import os
 
 from time import ctime, time
 from socket import inet_aton, error
@@ -43,7 +42,8 @@ def adjust_system_clock():
     c = ntplib.NTPClient()
     try:
         response = c.request('pool.ntp.org', version=3)
-        os.system('date ' + time.strftime('%m%d%H%M%Y.%S', time.localtime(response.tx_time)))
+        os.system('date ' + time.strftime('%m%d%H%M%Y.%S',
+                                          time.localtime(response.tx_time)))
     except:
         pass
 

@@ -19,14 +19,9 @@ class TimelineEntry:
         self.time = time
         self.seen = False
 
-    # def __repr__(self):
-    #     time = self.time.strftime('%Y-%m-%d %H:%M:%S')
-    #     return "{ \"time\":" + time + ", \"name\":" + self.username + \
-    #            ", \"message\":" + self.content + "\"id\":" + self.id + "}"
-
     def get_dict(self):
         return {
-            "name": self.username,
+            "username": self.username,
             "message": self.content,
             "id": self.id,
             "msg_nr": self.msg_nr,
@@ -43,7 +38,6 @@ class Timeline:
 
     def __repr__(self):
 
-        # messages = [msg for msgs in self.messages.values() for msg in msgs]
         messages = []
         for msgs in self.messages.values():
             for msg in msgs.values():
@@ -61,7 +55,7 @@ class Timeline:
 
             result += "-" * 79 + "\n"
             result += time + "(" + str(msg.get("msg_nr")) + ")" + " - "
-            result += msg.get("name") + ": " + msg.get("message")
+            result += msg.get("username") + ": " + msg.get("message")
             result += "\n"
 
         return self.username + "'s TIMELINE" + "\n" + result
@@ -73,7 +67,7 @@ class Timeline:
             if msg_idx in self.messages[user]:
                 msg = self.messages[user][msg_idx]
                 msgs.append({
-                    "name": msg['name'],
+                    "username": msg['username'],
                     "message": msg['message'],
                     "id": msg['id'],
                     "msg_nr": msg['msg_nr']
@@ -175,7 +169,7 @@ class Timeline:
     def save_current_messages(self):
         messages = {}
         self.lock.acquire()
-        for user, msgs in self.waiting_messages.items():
+        for user, msgs in self.messages.items():
             user_msgs = {}
             for msg_nr, msg in msgs.items():
                 new_msg = dict(msg)
