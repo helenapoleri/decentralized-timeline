@@ -1,6 +1,6 @@
 # Decentralized Timeline
 
-A peer-to-peer timeline service.
+A peer-to-peer timeline service, using Kademlia and Python's asyncio module.
 
 
 ## Authors
